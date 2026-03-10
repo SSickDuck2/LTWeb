@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NEU Curriculum{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 NEU Curriculum Database</h1>
+            <p>Hệ thống quản lý chương trình đào tạo - Đại học Kinh tế Quốc dân</p>
+        </header>
+
+        {% block breadcrumb %}{% endblock %}
+
+        {% block filters %}{% endblock %}
+
+        {% block content %}{% endblock %}
+
+        <footer>
+            <p>&copy; 2026 NEU Curriculum Management System</p>
+        </footer>
+    </div>
+</body>
+</html>
