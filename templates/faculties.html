@@ -39,7 +39,7 @@
             <tr>
                 <td><span class="badge">{{ faculty.attributes.facultyCode or 'N/A' }}</span></td>
                 <td>
-                    <a href="/majors?faculty_id={{ faculty.id }}" class="row-link">
+                    <a href="/majors?faculty_id={{ faculty.id }}&school_id={{ school_id }}" class="row-link">
                         {{ faculty.attributes.name }}
                     </a>
                 </td>
@@ -47,7 +47,7 @@
                     <span class="description">{{ faculty.attributes.description[:100] if faculty.attributes.description else 'Không có mô tả' }}</span>
                 </td>
                 <td>
-                    <a href="/majors?faculty_id={{ faculty.id }}" class="row-link">Xem → </a>
+                    <a href="/majors?faculty_id={{ faculty.id }}&school_id={{ school_id }}" class="row-link">Xem → </a>
                 </td>
             </tr>
             {% endfor %}

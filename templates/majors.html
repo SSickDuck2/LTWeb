@@ -39,7 +39,7 @@
             {% for major in majors %}
             <tr>
                 <td>
-                    <a href="/curricula?major_id={{ major.id }}" class="row-link">
+                    <a href="/curricula?major_id={{ major.id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">
                         {{ major.attributes.name }}
                     </a>
                 </td>
@@ -47,7 +47,7 @@
                     <span class="description">{{ major.attributes.description[:100] if major.attributes.description else 'Không có mô tả' }}</span>
                 </td>
                 <td>
-                    <a href="/curricula?major_id={{ major.id }}" class="row-link">Xem → </a>
+                    <a href="/curricula?major_id={{ major.id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">Xem → </a>
                 </td>
             </tr>
             {% endfor %}

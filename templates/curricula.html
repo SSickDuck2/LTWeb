@@ -40,7 +40,7 @@
             {% for curriculum in curricula %}
             <tr>
                 <td>
-                    <a href="/subjects?curricula_id={{ curriculum.id }}" class="row-link">
+                    <a href="/subjects?curricula_id={{ curriculum.id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">
                         {{ curriculum.attributes.name }}
                     </a>
                 </td>
@@ -48,7 +48,7 @@
                     <span class="description">{{ curriculum.attributes.description[:100] if curriculum.attributes.description else 'Không có mô tả' }}</span>
                 </td>
                 <td>
-                    <a href="/subjects?curricula_id={{ curriculum.id }}" class="row-link">Xem → </a>
+                    <a href="/subjects?curricula_id={{ curriculum.id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">Xem → </a>
                 </td>
             </tr>
             {% endfor %}

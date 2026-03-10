@@ -43,7 +43,7 @@
             <tr>
                 <td><span class="badge">{{ subject.attributes.subCode or 'N/A' }}</span></td>
                 <td>
-                    <a href="/syllabus?subject_id={{ subject.id }}" class="row-link">
+                    <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">
                         {{ subject.attributes.name }}
                     </a>
                 </td>
@@ -51,7 +51,7 @@
                     <span class="badge">{{ subject.attributes.credits or '0' }} TC</span>
                 </td>
                 <td>
-                    <a href="/syllabus?subject_id={{ subject.id }}" class="row-link">Xem → </a>
+                    <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">Xem → </a>
                 </td>
             </tr>
             {% endfor %}

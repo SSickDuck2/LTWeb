@@ -138,14 +138,16 @@ def upsert(conn: sqlite3.Connection, table: str, row_id: int, attributes: Dict[s
     conn.commit()
 
 
-def process_and_store(conn: sqlite3.Connection, items: List[Dict[str, Any]], table: str, parent_fragment: Optional[str] = None, parent_col: Optional[str] = None):
+def process_and_store(conn: sqlite3.Connection, items: List[Dict[str, Any]], table: str, parent_fragment: Optional[str] = None, parent_col: Optional[str] = None, default_parent_id: Optional[int] = None):
     count = 0
     for item in items:
         item_id = item.get('id')
         attributes = item.get('attributes', {}) if isinstance(item, dict) else {}
-        parent_id = None
-        if parent_fragment and attributes:
+        parent_id = item.get('school_id') or item.get('faculty_id') or item.get('major_id') or item.get('curricula_id')  # Check direct parent_id first
+        if parent_id is None and parent_fragment and attributes:
             parent_id = find_parent_id(attributes, parent_fragment)
+        if parent_id is None:
+            parent_id = default_parent_id
         upsert(conn, table, item_id, attributes, item, parent_col, parent_id)
         count += 1
     return count
@@ -181,6 +183,9 @@ def main():
 
     # Process faculties from schools population
     total_fac = 0
+    total_maj = 0
+    total_curr = 0
+    total_subj = 0
     for school in schools:
         attrs = school.get('attributes', {})
         fac_field = None
@@ -196,7 +201,26 @@ def main():
                     fac['school_id'] = school['id']
                 s = process_and_store(conn, fac_data, 'faculties', parent_col='school_id')
                 total_fac += s
+
+                # Process majors from faculties population
+                for fac in fac_data:
+                    fac_attrs = fac.get('attributes', {})
+                    maj_field = None
+                    for k in fac_attrs.keys():
+                        if 'majors' in k.lower() or 'curriculum_majors' in k.lower():
+                            maj_field = k
+                            break
+                    if maj_field:
+                        maj_data = fac_attrs[maj_field].get('data', [])
+                        if maj_data:
+                            # Add faculty_id to each major for relationship
+                            for maj in maj_data:
+                                maj['faculty_id'] = fac['id']
+                            s = process_and_store(conn, maj_data, 'majors', parent_col='faculty_id')
+                            total_maj += s
+
     print(f'Stored {total_fac} faculties (from schools population)')
+    print(f'Stored {total_maj} majors (from faculties population)')
 
     print('Fetching additional faculties...')
     faculties = fetch_all(session, endpoints['faculties'])
@@ -255,7 +279,10 @@ def main():
                                 if subj_rel:
                                     subjects.append(subj_rel)
                             if subjects:
-                                s = process_and_store(conn, subjects, 'subjects', parent_fragment='curricula', parent_col='curricula_id')
+                                # Add curricula_id to each subject for relationship
+                                for subj in subjects:
+                                    subj['curricula_id'] = curr['id']
+                                s = process_and_store(conn, subjects, 'subjects', parent_col='curricula_id')
                                 total_subj += s
 
     print(f'Stored {total_curr} curricula (from majors population)')
