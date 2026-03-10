@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Các Viện - NEU Curriculum{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+    <a href="/">Trang chủ</a> <span>/</span> <strong>{{ school_name }}</strong> <span>/</span> <strong>Các Viện</strong>
+</div>
+{% endblock %}
+
+{% block filters %}
+<div class="filters">
+    <div class="filter-group">
+        <form method="GET" style="display: flex; gap: 10px; align-items: center;">
+            <input type="hidden" name="school_id" value="{{ school_id }}">
+            <label for="search">Tìm kiếm:</label>
+            <input type="text" id="search" name="search" placeholder="Nhập tên viện..." value="{{ search or '' }}" style="flex: 1; max-width: 300px;">
+            <button type="submit">Tìm kiếm</button>
+            <a href="/faculties?school_id={{ school_id }}" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="table-wrapper">
+    {% if faculties and faculties|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Mã Viện</th>
+                <th>Tên Viện</th>
+                <th>Mô Tả</th>
+                <th>Hành Động</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for faculty in faculties %}
+            <tr>
+                <td><span class="badge">{{ faculty.attributes.facultyCode or 'N/A' }}</span></td>
+                <td>
+                    <a href="/majors?faculty_id={{ faculty.id }}" class="row-link">
+                        {{ faculty.attributes.name }}
+                    </a>
+                </td>
+                <td>
+                    <span class="description">{{ faculty.attributes.description[:100] if faculty.attributes.description else 'Không có mô tả' }}</span>
+                </td>
+                <td>
+                    <a href="/majors?faculty_id={{ faculty.id }}" class="row-link">Xem → </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if meta.total > meta.pageSize %}
+    <div class="pagination">
+        {% if meta.page > 1 %}
+        <a href="/faculties?school_id={{ school_id }}&page=1" class="page-link">« Trang đầu</a>
+        <a href="/faculties?school_id={{ school_id }}&page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
+        {% endif %}
+
+        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ (meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0) }}</strong></span>
+
+        {% if meta.page < ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) %}
+        <a href="/faculties?school_id={{ school_id }}&page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
+        <a href="/faculties?school_id={{ school_id }}&page={{ ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) }}" class="page-link">Trang cuối »</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <p>Không tìm thấy viện nào cho trường này</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
