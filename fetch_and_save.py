@@ -236,15 +236,50 @@ def main():
     else:
         print('No additional faculties to store')
 
-    print('Fetching majors...')
-    majors = fetch_all(session, endpoints['majors'])
-    n_maj = process_and_store(conn, majors, 'majors', parent_fragment='faculty', parent_col='faculty_id')
-    print(f'Stored {n_maj} majors')
+    # Extract majors from the faculties data (which may include minimal info)
+    total_maj = 0
+    all_majors = []
+    for fac in faculties:
+        fac_attrs = fac.get('attributes', {})
+        maj_field = None
+        for k in fac_attrs.keys():
+            if 'majors' in k.lower() or 'curriculum_majors' in k.lower():
+                maj_field = k
+                break
+        if maj_field:
+            maj_data = fac_attrs[maj_field].get('data', [])
+            if maj_data:
+                for maj in maj_data:
+                    maj['faculty_id'] = fac['id']
+                total_maj += process_and_store(conn, maj_data, 'majors', parent_col='faculty_id')
+                all_majors.extend(maj_data)
+    print(f'Stored {total_maj} majors (from faculties population)')
+
+    # Fetch detailed majors to get curricula information and preserve faculty links
+    print('Fetching majors for curricula/subjects...')
+    majors_detailed = fetch_all(session, endpoints['majors'])
+    print(f'Retrieved {len(majors_detailed)} detailed majors')
+    # show keys for first major
+    if majors_detailed:
+        print('First major keys:', list(majors_detailed[0].get('attributes', {}).keys()))
+    # annotate faculty_id from existing DB records
+    for maj in majors_detailed:
+        cur.execute('SELECT faculty_id FROM majors WHERE id = ?', (maj.get('id'),))
+        row = cur.fetchone()
+        if row and row[0] is not None:
+            maj['faculty_id'] = row[0]
+    # upsert to ensure any missing majors added but not overwrite faculty_id
+    for maj in majors_detailed:
+        faculty_id = maj.get('faculty_id')
+        process_and_store(conn, [maj], 'majors', parent_col='faculty_id')
+    # use detailed list as basis for curricula processing
+    all_majors = majors_detailed
+
 
     # If majors include curricula populated, store them too
     total_curr = 0
     total_subj = 0
-    for m in majors:
+    for m in all_majors:
         attrs = m.get('attributes', {})
         curricula_field = None
         for k in attrs.keys():
@@ -256,7 +291,10 @@ def main():
             if isinstance(data, dict):
                 data = [data]
             if data:
-                c = process_and_store(conn, data, 'curricula', parent_fragment='major', parent_col='major_id')
+                # Add major_id to each curricula for relationship
+                for curr in data:
+                    curr['major_id'] = m['id']
+                c = process_and_store(conn, data, 'curricula', parent_col='major_id')
                 total_curr += c
                 # Now process subjects from curricula
                 for curr in data:
@@ -287,6 +325,56 @@ def main():
 
     print(f'Stored {total_curr} curricula (from majors population)')
     print(f'Stored {total_subj} subjects (from curricula population)')
+
+    # FIX: Extract subjects from ALL curricula in DB, not just from the populated ones
+    print('Extracting subjects from all curricula in DB...')
+    cur.execute('SELECT id, attributes FROM curricula')
+    all_curricula = cur.fetchall()
+    total_subj_from_db = 0
+    
+    for curr_id, attrs_json in all_curricula:
+        try:
+            attrs = json.loads(attrs_json)
+            subj_data = attrs.get('curriculum_curriculum_subjects', {}).get('data', [])
+            
+            if not subj_data:
+                continue
+                
+            # Convert to list if it's a dict
+            if isinstance(subj_data, dict):
+                subj_data = [subj_data]
+            
+            # Extract the actual subjects
+            subjects = []
+            for subj_link in subj_data:
+                if not isinstance(subj_link, dict):
+                    continue
+                subj_attrs = subj_link.get('attributes', {})
+                subj_rel = subj_attrs.get('curriculum_subject', {}).get('data')
+                if subj_rel:
+                    subjects.append(subj_rel)
+            
+            if subjects:
+                # Check if subjects already exist for this curriculum
+                cur.execute('SELECT COUNT(*) FROM subjects WHERE curricula_id = ?', (curr_id,))
+                existing_count = cur.fetchone()[0]
+                
+                if existing_count == 0:  # Only insert if no subjects exist for this curriculum
+                    for subj in subjects:
+                        subj_id = subj.get('id')
+                        subj_attrs = subj.get('attributes', {})
+                        subj_attrs_json = json.dumps(subj_attrs, ensure_ascii=False)
+                        subj_raw_json = json.dumps(subj, ensure_ascii=False)
+                        
+                        cur.execute(
+                            'INSERT OR REPLACE INTO subjects (id, curricula_id, attributes, raw) VALUES (?, ?, ?, ?)',
+                            (subj_id, curr_id, subj_attrs_json, subj_raw_json)
+                        )
+                        total_subj_from_db += 1
+        except Exception as e:
+            print(f'Error processing curriculum {curr_id}: {e}')
+    
+    print(f'Stored {total_subj_from_db} additional subjects (from DB curricula)')
 
 
 if __name__ == '__main__':
