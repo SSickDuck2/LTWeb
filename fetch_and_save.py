@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import sqlite3
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 from urllib.parse import urlparse, parse_qs
 
 import requests
+from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import Session
+
+from backend.orm import (
+    Curriculum,
+    CurriculumSubject,
+    Faculty,
+    Major,
+    School,
+    Subject,
+    create_session_factory,
+)
 
 
 def parse_url_params(url: str):
@@ -45,63 +57,72 @@ def fetch_all(session: requests.Session, url: str) -> List[Dict[str, Any]]:
     return results
 
 
-def ensure_tables(conn: sqlite3.Connection):
-    cur = conn.cursor()
-    cur.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS schools (
-            id INTEGER PRIMARY KEY,
-            attributes TEXT,
-            raw TEXT
-        )
-        '''
+TABLE_MODEL_MAP: Dict[str, Type[Any]] = {
+    "schools": School,
+    "faculties": Faculty,
+    "majors": Major,
+    "curricula": Curriculum,
+    "subjects": Subject,
+}
+
+
+def _json_text(value: Dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def upsert_item(
+    db: Session,
+    table: str,
+    row_id: int,
+    attributes: Dict[str, Any],
+    raw: Dict[str, Any],
+    parent_col: Optional[str] = None,
+    parent_id: Optional[int] = None,
+) -> None:
+    model = TABLE_MODEL_MAP[table]
+    payload: Dict[str, Any] = {
+        "id": row_id,
+        "attributes": _json_text(attributes),
+        "raw": _json_text(raw),
+    }
+
+    if parent_col and parent_id is not None and table != "subjects":
+        payload[parent_col] = parent_id
+
+    update_set: Dict[str, Any] = {
+        "attributes": payload["attributes"],
+        "raw": payload["raw"],
+    }
+
+    if parent_col and parent_id is not None and table != "subjects":
+        update_set[parent_col] = parent_id
+
+    stmt = sqlite_insert(model.__table__).values(**payload)
+    stmt = stmt.on_conflict_do_update(index_elements=[model.__table__.c.id], set_=update_set)
+    db.execute(stmt)
+
+
+def upsert_curriculum_subject_link(
+    db: Session,
+    curricula_id: int,
+    subject_id: int,
+    link_attributes: Dict[str, Any],
+) -> None:
+    payload = {
+        "curricula_id": curricula_id,
+        "subject_id": subject_id,
+        "link_attributes": _json_text(link_attributes),
+    }
+
+    stmt = sqlite_insert(CurriculumSubject.__table__).values(**payload)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[
+            CurriculumSubject.__table__.c.curricula_id,
+            CurriculumSubject.__table__.c.subject_id,
+        ],
+        set_={"link_attributes": payload["link_attributes"]},
     )
-    cur.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS faculties (
-            id INTEGER PRIMARY KEY,
-            school_id INTEGER,
-            attributes TEXT,
-            raw TEXT
-        )
-        '''
-    )
-    cur.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS majors (
-            id INTEGER PRIMARY KEY,
-            faculty_id INTEGER,
-            attributes TEXT,
-            raw TEXT
-        )
-        '''
-    )
-    cur.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS curricula (
-            id INTEGER PRIMARY KEY,
-            major_id INTEGER,
-            attributes TEXT,
-            raw TEXT
-        )
-        '''
-    )
-    cur.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS subjects (
-            id INTEGER PRIMARY KEY,
-            curricula_id INTEGER,
-            attributes TEXT,
-            raw TEXT
-        )
-        '''
-    )
-    # Create indexes for better search performance
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_faculties_school_id ON faculties (school_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_majors_faculty_id ON majors (faculty_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_curricula_major_id ON curricula (major_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_subjects_curricula_id ON subjects (curricula_id)")
-    conn.commit()
+    db.execute(stmt)
 
 
 def find_parent_id(attrs: Dict[str, Any], parent_key_fragment: str) -> Optional[int]:
@@ -116,41 +137,85 @@ def find_parent_id(attrs: Dict[str, Any], parent_key_fragment: str) -> Optional[
                     return d[0]['id']
             if isinstance(v, dict) and 'id' in v:
                 return v['id']
-    # fallback: try any relation-like dict with data->id
-    for v in attrs.values():
-        if isinstance(v, dict) and 'data' in v:
-            d = v['data']
-            if isinstance(d, dict) and 'id' in d:
-                return d['id']
-            if isinstance(d, list) and len(d) > 0 and isinstance(d[0], dict) and 'id' in d[0]:
-                return d[0]['id']
     return None
 
 
-def upsert(conn: sqlite3.Connection, table: str, row_id: int, attributes: Dict[str, Any], raw: Dict[str, Any], parent_col: Optional[str] = None, parent_id: Optional[int] = None):
-    cur = conn.cursor()
-    attrs_text = json.dumps(attributes, ensure_ascii=False)
-    raw_text = json.dumps(raw, ensure_ascii=False)
-    if parent_col and parent_id is not None:
-        cur.execute(f"INSERT OR REPLACE INTO {table} (id, {parent_col}, attributes, raw) VALUES (?, ?, ?, ?)", (row_id, parent_id, attrs_text, raw_text))
-    else:
-        cur.execute(f"INSERT OR REPLACE INTO {table} (id, attributes, raw) VALUES (?, ?, ?)", (row_id, attrs_text, raw_text))
-    conn.commit()
-
-
-def process_and_store(conn: sqlite3.Connection, items: List[Dict[str, Any]], table: str, parent_fragment: Optional[str] = None, parent_col: Optional[str] = None, default_parent_id: Optional[int] = None):
+def process_and_store(
+    db: Session,
+    items: List[Dict[str, Any]],
+    table: str,
+    parent_fragment: Optional[str] = None,
+    parent_col: Optional[str] = None,
+    default_parent_id: Optional[int] = None,
+) -> int:
     count = 0
     for item in items:
         item_id = item.get('id')
+        if item_id is None:
+            continue
+
         attributes = item.get('attributes', {}) if isinstance(item, dict) else {}
-        parent_id = item.get('school_id') or item.get('faculty_id') or item.get('major_id') or item.get('curricula_id')  # Check direct parent_id first
+        parent_id = item.get(parent_col) if parent_col else None
         if parent_id is None and parent_fragment and attributes:
             parent_id = find_parent_id(attributes, parent_fragment)
         if parent_id is None:
             parent_id = default_parent_id
-        upsert(conn, table, item_id, attributes, item, parent_col, parent_id)
+
+        upsert_item(db, table, int(item_id), attributes, item, parent_col, parent_id)
         count += 1
+
     return count
+
+
+def _extract_and_store_curriculum_subjects(db: Session, curriculum_item: Dict[str, Any]) -> int:
+    curricula_id = curriculum_item.get("id")
+    curriculum_attrs = curriculum_item.get("attributes", {}) if isinstance(curriculum_item, dict) else {}
+    if curricula_id is None:
+        return 0
+
+    links = curriculum_attrs.get("curriculum_curriculum_subjects", {}).get("data", [])
+    if isinstance(links, dict):
+        links = [links]
+
+    stored = 0
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+
+        link_attributes = link.get("attributes", {})
+        subject = link_attributes.get("curriculum_subject", {}).get("data")
+        if not isinstance(subject, dict):
+            continue
+
+        subject_id = subject.get("id")
+        subject_attributes = subject.get("attributes", {})
+        if subject_id is None or not isinstance(subject_attributes, dict):
+            continue
+
+        upsert_item(db, "subjects", int(subject_id), subject_attributes, subject)
+        upsert_curriculum_subject_link(db, int(curricula_id), int(subject_id), link_attributes)
+        stored += 1
+
+    return stored
+
+
+def _backfill_links_from_curricula_in_db(db: Session) -> int:
+    rows = db.execute(select(Curriculum.id, Curriculum.attributes)).all()
+    total = 0
+
+    for curricula_id, attrs_text in rows:
+        try:
+            attrs = json.loads(attrs_text) if attrs_text else {}
+        except json.JSONDecodeError:
+            continue
+
+        item = {
+            "id": curricula_id,
+            "attributes": attrs,
+        }
+        total += _extract_and_store_curriculum_subjects(db, item)
+
+    return total
 
 
 def main():
@@ -166,215 +231,150 @@ def main():
     }
 
     session = requests.Session()
+
     try:
-        conn = sqlite3.connect(args.db, timeout=30.0)
-        conn.isolation_level = None  # autocommit mode
+        runtime_engine, SessionFactory = create_session_factory(args.db)
     except Exception as e:
         print('Could not open database:', e)
         print('Hint: Make sure DB Browser for SQLite is CLOSED.')
         sys.exit(1)
 
-    ensure_tables(conn)
+    with SessionFactory() as db:
+        print('Fetching schools...')
+        schools = fetch_all(session, endpoints['schools'])
+        n_schools = process_and_store(db, schools, 'schools')
+        print(f'Stored {n_schools} schools')
 
-    print('Fetching schools...')
-    schools = fetch_all(session, endpoints['schools'])
-    n_schools = process_and_store(conn, schools, 'schools')
-    print(f'Stored {n_schools} schools')
+        total_fac = 0
+        total_maj = 0
+        total_curr = 0
+        total_subject_links = 0
+        faculty_to_school: Dict[int, int] = {}
 
-    # Process faculties from schools population
-    total_fac = 0
-    total_maj = 0
-    total_curr = 0
-    total_subj = 0
-    for school in schools:
-        attrs = school.get('attributes', {})
-        fac_field = None
-        for k in attrs.keys():
-            if 'facult' in k.lower():
-                fac_field = k
-                break
-        if fac_field:
-            fac_data = attrs[fac_field].get('data', [])
-            if fac_data:
-                # Add school_id to each faculty for relationship
-                for fac in fac_data:
-                    fac['school_id'] = school['id']
-                s = process_and_store(conn, fac_data, 'faculties', parent_col='school_id')
-                total_fac += s
-
-                # Process majors from faculties population
-                for fac in fac_data:
-                    fac_attrs = fac.get('attributes', {})
-                    maj_field = None
-                    for k in fac_attrs.keys():
-                        if 'majors' in k.lower() or 'curriculum_majors' in k.lower():
-                            maj_field = k
-                            break
-                    if maj_field:
-                        maj_data = fac_attrs[maj_field].get('data', [])
-                        if maj_data:
-                            # Add faculty_id to each major for relationship
-                            for maj in maj_data:
-                                maj['faculty_id'] = fac['id']
-                            s = process_and_store(conn, maj_data, 'majors', parent_col='faculty_id')
-                            total_maj += s
-
-    print(f'Stored {total_fac} faculties (from schools population)')
-    print(f'Stored {total_maj} majors (from faculties population)')
-
-    print('Fetching additional faculties...')
-    faculties = fetch_all(session, endpoints['faculties'])
-    # Filter out faculties already stored
-    existing_ids = set()
-    cur = conn.cursor()
-    cur.execute('SELECT id FROM faculties')
-    existing_ids = {row[0] for row in cur.fetchall()}
-    new_faculties = [f for f in faculties if f['id'] not in existing_ids]
-    if new_faculties:
-        n_fac = process_and_store(conn, new_faculties, 'faculties', parent_fragment='school', parent_col='school_id')
-        print(f'Stored {n_fac} additional faculties')
-    else:
-        print('No additional faculties to store')
-
-    # Extract majors from the faculties data (which may include minimal info)
-    total_maj = 0
-    all_majors = []
-    for fac in faculties:
-        fac_attrs = fac.get('attributes', {})
-        maj_field = None
-        for k in fac_attrs.keys():
-            if 'majors' in k.lower() or 'curriculum_majors' in k.lower():
-                maj_field = k
-                break
-        if maj_field:
-            maj_data = fac_attrs[maj_field].get('data', [])
-            if maj_data:
-                for maj in maj_data:
-                    maj['faculty_id'] = fac['id']
-                total_maj += process_and_store(conn, maj_data, 'majors', parent_col='faculty_id')
-                all_majors.extend(maj_data)
-    print(f'Stored {total_maj} majors (from faculties population)')
-
-    # Fetch detailed majors to get curricula information and preserve faculty links
-    print('Fetching majors for curricula/subjects...')
-    majors_detailed = fetch_all(session, endpoints['majors'])
-    print(f'Retrieved {len(majors_detailed)} detailed majors')
-    # show keys for first major
-    if majors_detailed:
-        print('First major keys:', list(majors_detailed[0].get('attributes', {}).keys()))
-    # annotate faculty_id from existing DB records
-    for maj in majors_detailed:
-        cur.execute('SELECT faculty_id FROM majors WHERE id = ?', (maj.get('id'),))
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            maj['faculty_id'] = row[0]
-    # upsert to ensure any missing majors added but not overwrite faculty_id
-    for maj in majors_detailed:
-        faculty_id = maj.get('faculty_id')
-        process_and_store(conn, [maj], 'majors', parent_col='faculty_id')
-    # use detailed list as basis for curricula processing
-    all_majors = majors_detailed
-
-
-    # If majors include curricula populated, store them too
-    total_curr = 0
-    total_subj = 0
-    for m in all_majors:
-        attrs = m.get('attributes', {})
-        curricula_field = None
-        for k in attrs.keys():
-            if 'curricula' in k.lower() or 'curriculum' in k.lower():
-                curricula_field = k
-                break
-        if curricula_field:
-            data = attrs.get(curricula_field, {}).get('data', [])
-            if isinstance(data, dict):
-                data = [data]
-            if data:
-                # Add major_id to each curricula for relationship
-                for curr in data:
-                    curr['major_id'] = m['id']
-                c = process_and_store(conn, data, 'curricula', parent_col='major_id')
-                total_curr += c
-                # Now process subjects from curricula
-                for curr in data:
-                    curr_attrs = curr.get('attributes', {})
-                    subj_field = None
-                    for k in curr_attrs.keys():
-                        if 'curriculum_subjects' in k.lower() or 'subjects' in k.lower():
-                            subj_field = k
-                            break
-                    if subj_field:
-                        subj_data = curr_attrs.get(subj_field, {}).get('data', [])
-                        if isinstance(subj_data, dict):
-                            subj_data = [subj_data]
-                        if subj_data:
-                            # Extract the actual subject from curriculum_subject
-                            subjects = []
-                            for subj_link in subj_data:
-                                subj_attrs = subj_link.get('attributes', {})
-                                subj_rel = subj_attrs.get('curriculum_subject', {}).get('data')
-                                if subj_rel:
-                                    subjects.append(subj_rel)
-                            if subjects:
-                                # Add curricula_id to each subject for relationship
-                                for subj in subjects:
-                                    subj['curricula_id'] = curr['id']
-                                s = process_and_store(conn, subjects, 'subjects', parent_col='curricula_id')
-                                total_subj += s
-
-    print(f'Stored {total_curr} curricula (from majors population)')
-    print(f'Stored {total_subj} subjects (from curricula population)')
-
-    # FIX: Extract subjects from ALL curricula in DB, not just from the populated ones
-    print('Extracting subjects from all curricula in DB...')
-    cur.execute('SELECT id, attributes FROM curricula')
-    all_curricula = cur.fetchall()
-    total_subj_from_db = 0
-    
-    for curr_id, attrs_json in all_curricula:
-        try:
-            attrs = json.loads(attrs_json)
-            subj_data = attrs.get('curriculum_curriculum_subjects', {}).get('data', [])
-            
-            if not subj_data:
+        for school in schools:
+            attrs = school.get('attributes', {})
+            fac_field = next((k for k in attrs.keys() if 'facult' in k.lower()), None)
+            if not fac_field:
                 continue
-                
-            # Convert to list if it's a dict
-            if isinstance(subj_data, dict):
-                subj_data = [subj_data]
-            
-            # Extract the actual subjects
-            subjects = []
-            for subj_link in subj_data:
-                if not isinstance(subj_link, dict):
+
+            fac_data = attrs.get(fac_field, {}).get('data', [])
+            if not fac_data:
+                continue
+
+            for fac in fac_data:
+                fac['school_id'] = school.get('id')
+                if fac.get('id') is not None and school.get('id') is not None:
+                    faculty_to_school[int(fac['id'])] = int(school['id'])
+            total_fac += process_and_store(db, fac_data, 'faculties', parent_col='school_id')
+
+            for fac in fac_data:
+                fac_attrs = fac.get('attributes', {})
+                maj_field = next(
+                    (k for k in fac_attrs.keys() if 'majors' in k.lower() or 'curriculum_majors' in k.lower()),
+                    None,
+                )
+                if not maj_field:
                     continue
-                subj_attrs = subj_link.get('attributes', {})
-                subj_rel = subj_attrs.get('curriculum_subject', {}).get('data')
-                if subj_rel:
-                    subjects.append(subj_rel)
-            
-            if subjects:
-                # Check if subjects already exist for this curriculum
-                cur.execute('SELECT COUNT(*) FROM subjects WHERE curricula_id = ?', (curr_id,))
-                existing_count = cur.fetchone()[0]
-                
-                if existing_count == 0:  # Only insert if no subjects exist for this curriculum
-                    for subj in subjects:
-                        subj_id = subj.get('id')
-                        subj_attrs = subj.get('attributes', {})
-                        subj_attrs_json = json.dumps(subj_attrs, ensure_ascii=False)
-                        subj_raw_json = json.dumps(subj, ensure_ascii=False)
-                        
-                        cur.execute(
-                            'INSERT OR REPLACE INTO subjects (id, curricula_id, attributes, raw) VALUES (?, ?, ?, ?)',
-                            (subj_id, curr_id, subj_attrs_json, subj_raw_json)
-                        )
-                        total_subj_from_db += 1
-        except Exception as e:
-            print(f'Error processing curriculum {curr_id}: {e}')
-    
-    print(f'Stored {total_subj_from_db} additional subjects (from DB curricula)')
+
+                maj_data = fac_attrs.get(maj_field, {}).get('data', [])
+                if not maj_data:
+                    continue
+
+                for maj in maj_data:
+                    maj['faculty_id'] = fac.get('id')
+                total_maj += process_and_store(db, maj_data, 'majors', parent_col='faculty_id')
+
+        print(f'Stored {total_fac} faculties (from schools population)')
+        print(f'Stored {total_maj} majors (from faculties population)')
+
+        print('Fetching additional faculties...')
+        faculties = fetch_all(session, endpoints['faculties'])
+
+        for fac in faculties:
+            fid = fac.get('id')
+            if fid is None:
+                continue
+            mapped_school_id = faculty_to_school.get(int(fid))
+            if mapped_school_id is not None:
+                fac['school_id'] = mapped_school_id
+
+        additional_fac = process_and_store(db, faculties, 'faculties', parent_col='school_id')
+        print(f'Stored/updated {additional_fac} faculties (from faculties endpoint)')
+
+        majors_from_faculties = 0
+        for fac in faculties:
+            fac_attrs = fac.get('attributes', {})
+            maj_field = next(
+                (k for k in fac_attrs.keys() if 'majors' in k.lower() or 'curriculum_majors' in k.lower()),
+                None,
+            )
+            if not maj_field:
+                continue
+
+            maj_data = fac_attrs.get(maj_field, {}).get('data', [])
+            if not maj_data:
+                continue
+
+            for maj in maj_data:
+                maj['faculty_id'] = fac.get('id')
+            majors_from_faculties += process_and_store(db, maj_data, 'majors', parent_col='faculty_id')
+
+        print(f'Stored/updated {majors_from_faculties} majors (from faculties endpoint)')
+
+        print('Fetching majors for curricula/subjects...')
+        majors_detailed = fetch_all(session, endpoints['majors'])
+        print(f'Retrieved {len(majors_detailed)} detailed majors')
+        if majors_detailed:
+            print('First major keys:', list(majors_detailed[0].get('attributes', {}).keys()))
+
+        existing_major_faculty = {
+            major_id: faculty_id
+            for major_id, faculty_id in db.execute(select(Major.id, Major.faculty_id)).all()
+            if faculty_id is not None
+        }
+
+        for maj in majors_detailed:
+            if maj.get('faculty_id') is None:
+                mapped_faculty = existing_major_faculty.get(maj.get('id'))
+                if mapped_faculty is not None:
+                    maj['faculty_id'] = mapped_faculty
+
+        detailed_major_count = process_and_store(db, majors_detailed, 'majors', parent_col='faculty_id')
+        print(f'Stored/updated {detailed_major_count} majors (from detailed majors endpoint)')
+
+        for major in majors_detailed:
+            major_attrs = major.get('attributes', {})
+            curricula_field = next(
+                (k for k in major_attrs.keys() if 'curricula' in k.lower() or 'curriculum' in k.lower()),
+                None,
+            )
+            if not curricula_field:
+                continue
+
+            curricula_data = major_attrs.get(curricula_field, {}).get('data', [])
+            if isinstance(curricula_data, dict):
+                curricula_data = [curricula_data]
+            if not curricula_data:
+                continue
+
+            for curriculum in curricula_data:
+                curriculum['major_id'] = major.get('id')
+
+            total_curr += process_and_store(db, curricula_data, 'curricula', parent_col='major_id')
+
+            for curriculum in curricula_data:
+                total_subject_links += _extract_and_store_curriculum_subjects(db, curriculum)
+
+        print(f'Stored/updated {total_curr} curricula (from majors endpoint)')
+        print(f'Stored/updated {total_subject_links} curriculum-subject links (from majors endpoint)')
+
+        print('Backfilling links from all curricula already in DB...')
+        backfilled_links = _backfill_links_from_curricula_in_db(db)
+        print(f'Backfilled/updated {backfilled_links} curriculum-subject links (from stored curricula JSON)')
+
+        db.commit()
+
+    runtime_engine.dispose()
 
 
 if __name__ == '__main__':

@@ -1,112 +1,358 @@
-import sqlite3
-from contextlib import contextmanager
-from typing import Dict, Any, List, Optional
 import json
+from contextlib import contextmanager
+from typing import Any, Dict, Generator, List, Optional, Set, Type
 
-DB_PATH = "database/syllabus.db"
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session
+
+from backend.orm import (
+    Curriculum,
+    CurriculumSubject,
+    Faculty,
+    Major,
+    School,
+    SessionLocal,
+    Subject,
+    create_schema,
+)
+
+create_schema()
+
+TABLE_MODELS: Dict[str, Type[Any]] = {
+    "schools": School,
+    "faculties": Faculty,
+    "majors": Major,
+    "curricula": Curriculum,
+    "subjects": Subject,
+}
+
+TABLE_FILTERS: Dict[str, Set[str]] = {
+    "schools": set(),
+    "faculties": {"school_id"},
+    "majors": {"faculty_id"},
+    "curricula": {"major_id"},
+    "subjects": {"curricula_id"},
+}
+
+
+def _validate_table(table: str) -> None:
+    if table not in TABLE_MODELS:
+        raise ValueError(f"Unsupported table: {table}")
+
+
+def _parse_json(text: Optional[str]) -> Dict[str, Any]:
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _serialize_item(model_instance: Any) -> Dict[str, Any]:
+    return {
+        "id": model_instance.id,
+        "attributes": _parse_json(model_instance.attributes),
+        "raw": _parse_json(model_instance.raw),
+    }
+
+
+def _merge_subject_attributes(base_attributes: Dict[str, Any], link_attributes: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base_attributes)
+
+    if "subjectCode" in merged and "subCode" not in merged:
+        merged["subCode"] = merged["subjectCode"]
+
+    merged.setdefault("semester", link_attributes.get("semester"))
+    merged.setdefault("required", link_attributes.get("required"))
+    merged.setdefault("knowledgeBlock", link_attributes.get("knowledgeBlock"))
+    merged.setdefault("knowledgeBlockId", link_attributes.get("knowledgeBlockId"))
+    merged.setdefault("note", link_attributes.get("note"))
+
+    return merged
+
 
 @contextmanager
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
+def get_db() -> Generator[Session, None, None]:
+    db = SessionLocal()
     try:
-        yield conn
+        yield db
     finally:
-        conn.close()
+        db.close()
 
-def get_table_data(table: str, id: Optional[int] = None, page: int = 1, page_size: int = 10, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    with get_db() as conn:
-        cur = conn.cursor()
-        offset = (page - 1) * page_size
-        where_clause = ""
-        params = []
-        if id:
-            where_clause = "WHERE id = ?"
-            params = [id]
-        elif filters:
-            conditions = []
-            for k, v in filters.items():
-                conditions.append(f"{k} = ?")
-                params.append(v)
-            where_clause = "WHERE " + " AND ".join(conditions)
-        
-        query = f"SELECT id, attributes, raw FROM {table} {where_clause} LIMIT ? OFFSET ?"
-        params.extend([page_size, offset])
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        
-        # Total count
-        count_query = f"SELECT COUNT(*) FROM {table} {where_clause}"
-        if id:
-            count_params = [id]
-        elif filters:
-            count_params = list(filters.values())
-        else:
-            count_params = []
-        cur.execute(count_query, count_params)
-        total = cur.fetchone()[0]
-        
+
+def _build_query(
+    table: str,
+    id: Optional[int] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    search: Optional[str] = None,
+):
+    model = TABLE_MODELS[table]
+    query = select(model)
+
+    if id is not None:
+        query = query.where(model.id == id)
+
+    if filters:
+        for key, value in filters.items():
+            if value is None:
+                continue
+            if key not in TABLE_FILTERS[table]:
+                raise ValueError(f"Unsupported filter '{key}' for table '{table}'")
+            query = query.where(getattr(model, key) == value)
+
+    normalized_search = (search or "").strip()
+    if normalized_search:
+        query = query.where(model.attributes.like(f"%{normalized_search}%"))
+
+    return query
+
+
+def get_subjects_by_curriculum(
+    curricula_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    search: Optional[str] = None,
+) -> Dict[str, Any]:
+    offset = (page - 1) * page_size
+    normalized_search = (search or "").strip()
+
+    with get_db() as db:
+        query = (
+            select(Subject, CurriculumSubject.link_attributes)
+            .join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
+            .where(CurriculumSubject.curricula_id == curricula_id)
+        )
+
+        if normalized_search:
+            query = query.where(Subject.attributes.like(f"%{normalized_search}%"))
+
+        total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
+        rows = db.execute(query.order_by(Subject.id).offset(offset).limit(page_size)).all()
+
         data = []
-        for row in rows:
-            data.append({
-                "id": row[0],
-                "attributes": json.loads(row[1]) if row[1] else {},
-                "raw": json.loads(row[2]) if row[2] else {}
-            })
-        
+        for subject, link_attributes_text in rows:
+            base_item = _serialize_item(subject)
+            link_attributes = _parse_json(link_attributes_text)
+            base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link_attributes)
+            data.append(base_item)
+
         return {
             "data": data,
             "totalRecords": total,
             "page": page,
             "pageSize": page_size,
-            "skippedRecords": offset
+            "skippedRecords": offset,
         }
 
-def create_item(table: str, attributes: Dict[str, Any], parent_col: Optional[str] = None, parent_id: Optional[int] = None) -> int:
-    with get_db() as conn:
-        cur = conn.cursor()
-        raw = {"attributes": attributes}
-        attrs_text = json.dumps(attributes, ensure_ascii=False)
-        raw_text = json.dumps(raw, ensure_ascii=False)
-        if parent_col and parent_id:
-            cur.execute(f"INSERT INTO {table} ({parent_col}, attributes, raw) VALUES (?, ?, ?)", (parent_id, attrs_text, raw_text))
-        else:
-            cur.execute(f"INSERT INTO {table} (attributes, raw) VALUES (?, ?)", (attrs_text, raw_text))
-        conn.commit()
-        return cur.lastrowid
+
+def get_subject_from_curriculum(curricula_id: int, subject_id: int) -> Optional[Dict[str, Any]]:
+    with get_db() as db:
+        row = db.execute(
+            select(Subject, CurriculumSubject.link_attributes)
+            .join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
+            .where(CurriculumSubject.curricula_id == curricula_id)
+            .where(Subject.id == subject_id)
+        ).first()
+
+        if not row:
+            return None
+
+        subject, link_attributes_text = row
+        base_item = _serialize_item(subject)
+        link_attributes = _parse_json(link_attributes_text)
+        base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link_attributes)
+        return base_item
+
+
+def get_table_data(
+    table: str,
+    id: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 10,
+    filters: Optional[Dict[str, Any]] = None,
+    search: Optional[str] = None,
+) -> Dict[str, Any]:
+    _validate_table(table)
+
+    curricula_id = None
+    if table == "subjects" and filters:
+        curricula_id = filters.get("curricula_id")
+
+    if table == "subjects" and id is None and curricula_id is not None:
+        return get_subjects_by_curriculum(
+            curricula_id=curricula_id,
+            page=page,
+            page_size=page_size,
+            search=search,
+        )
+
+    offset = (page - 1) * page_size
+
+    with get_db() as db:
+        query = _build_query(table, id=id, filters=filters, search=search)
+        total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
+
+        model = TABLE_MODELS[table]
+        items = db.execute(query.order_by(model.id).offset(offset).limit(page_size)).scalars().all()
+
+        return {
+            "data": [_serialize_item(item) for item in items],
+            "totalRecords": total,
+            "page": page,
+            "pageSize": page_size,
+            "skippedRecords": offset,
+        }
+
+
+def create_item(
+    table: str,
+    attributes: Dict[str, Any],
+    parent_col: Optional[str] = None,
+    parent_id: Optional[int] = None,
+) -> int:
+    _validate_table(table)
+
+    model = TABLE_MODELS[table]
+    attrs_text = json.dumps(attributes, ensure_ascii=False)
+    raw_text = json.dumps({"attributes": attributes}, ensure_ascii=False)
+
+    with get_db() as db:
+        payload = {
+            "attributes": attrs_text,
+            "raw": raw_text,
+        }
+
+        if table != "subjects" and parent_col and parent_id is not None:
+            if parent_col not in TABLE_FILTERS[table]:
+                raise ValueError(f"Unsupported parent '{parent_col}' for table '{table}'")
+            payload[parent_col] = parent_id
+
+        item = model(**payload)
+        db.add(item)
+        db.flush()
+        created_id = int(item.id)
+
+        if table == "subjects" and parent_col == "curricula_id" and parent_id is not None:
+            link = db.get(CurriculumSubject, (parent_id, created_id))
+            if link is None:
+                db.add(CurriculumSubject(curricula_id=parent_id, subject_id=created_id, link_attributes="{}"))
+
+        db.commit()
+        return created_id
+
 
 def update_item(table: str, id: int, attributes: Optional[Dict[str, Any]] = None) -> bool:
-    with get_db() as conn:
-        cur = conn.cursor()
-        if attributes is not None:
-            attrs_text = json.dumps(attributes, ensure_ascii=False)
-            raw = {"attributes": attributes}
-            raw_text = json.dumps(raw, ensure_ascii=False)
-            cur.execute(f"UPDATE {table} SET attributes = ?, raw = ? WHERE id = ?", (attrs_text, raw_text, id))
-        conn.commit()
-        return cur.rowcount > 0
+    _validate_table(table)
+    if attributes is None:
+        return False
+
+    model = TABLE_MODELS[table]
+    attrs_text = json.dumps(attributes, ensure_ascii=False)
+    raw_text = json.dumps({"attributes": attributes}, ensure_ascii=False)
+
+    with get_db() as db:
+        item = db.get(model, id)
+        if item is None:
+            return False
+
+        item.attributes = attrs_text
+        item.raw = raw_text
+        db.commit()
+        return True
+
 
 def delete_item(table: str, id: Optional[int] = None, ids: Optional[List[int]] = None) -> int:
-    with get_db() as conn:
-        cur = conn.cursor()
-        if id:
-            cur.execute(f"DELETE FROM {table} WHERE id = ?", (id,))
-        elif ids and ids:  # check not empty
-            placeholders = ','.join('?' for _ in ids)
-            cur.execute(f"DELETE FROM {table} WHERE id IN ({placeholders})", ids)
-        else:
+    _validate_table(table)
+
+    target_ids: List[int]
+    if id is not None:
+        target_ids = [id]
+    elif ids:
+        target_ids = ids
+    else:
+        return 0
+
+    model = TABLE_MODELS[table]
+
+    with get_db() as db:
+        existing_ids = db.execute(select(model.id).where(model.id.in_(target_ids))).scalars().all()
+        if not existing_ids:
             return 0
-        conn.commit()
-        return cur.rowcount
+
+        if table == "subjects":
+            db.execute(delete(CurriculumSubject).where(CurriculumSubject.subject_id.in_(existing_ids)))
+        if table == "curricula":
+            db.execute(delete(CurriculumSubject).where(CurriculumSubject.curricula_id.in_(existing_ids)))
+
+        result = db.execute(delete(model).where(model.id.in_(existing_ids)))
+        db.commit()
+        return int(result.rowcount or 0)
+
 
 def get_single_item(table: str, id: int) -> Optional[Dict[str, Any]]:
-    with get_db() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id, attributes, raw FROM {table} WHERE id = ?", (id,))
-        row = cur.fetchone()
-        if row:
-            return {
-                "id": row[0],
-                "attributes": json.loads(row[1]) if row[1] else {},
-                "raw": json.loads(row[2]) if row[2] else {}
-            }
-        return None
+    _validate_table(table)
+    model = TABLE_MODELS[table]
+
+    with get_db() as db:
+        item = db.get(model, id)
+        if item is None:
+            return None
+        return _serialize_item(item)
+
+
+def migrate_subject_links_from_curricula() -> int:
+    created_links = 0
+
+    with get_db() as db:
+        rows = db.execute(select(Curriculum.id, Curriculum.attributes)).all()
+
+        for curricula_id, attributes_text in rows:
+            curriculum_attributes = _parse_json(attributes_text)
+            links = curriculum_attributes.get("curriculum_curriculum_subjects", {}).get("data", [])
+
+            if isinstance(links, dict):
+                links = [links]
+
+            for link in links:
+                if not isinstance(link, dict):
+                    continue
+
+                link_attributes = link.get("attributes", {})
+                subject = link_attributes.get("curriculum_subject", {}).get("data")
+                if not isinstance(subject, dict):
+                    continue
+
+                subject_id = subject.get("id")
+                subject_attributes = subject.get("attributes", {})
+                if subject_id is None or not isinstance(subject_attributes, dict):
+                    continue
+
+                attrs_text = json.dumps(subject_attributes, ensure_ascii=False)
+                raw_text = json.dumps(subject, ensure_ascii=False)
+
+                existing_subject = db.get(Subject, subject_id)
+                if existing_subject is None:
+                    db.add(Subject(id=subject_id, attributes=attrs_text, raw=raw_text))
+                else:
+                    existing_subject.attributes = attrs_text
+                    existing_subject.raw = raw_text
+
+                existing_link = db.get(CurriculumSubject, (curricula_id, subject_id))
+                link_attributes_text = json.dumps(link_attributes, ensure_ascii=False)
+
+                if existing_link is None:
+                    db.add(
+                        CurriculumSubject(
+                            curricula_id=curricula_id,
+                            subject_id=subject_id,
+                            link_attributes=link_attributes_text,
+                        )
+                    )
+                    created_links += 1
+                else:
+                    existing_link.link_attributes = link_attributes_text
+
+        db.commit()
+
+    return created_links

@@ -1,24 +1,26 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from typing import List, Optional
 from backend.models import ItemCreate, ItemUpdate, PaginatedResponse
-from backend.database import get_table_data, create_item, update_item, delete_item, get_single_item
+from backend.database import create_item, delete_item
+from backend.routes.common import delete_item_or_404, list_items, update_item_or_404
 
 router = APIRouter(prefix="/schools", tags=["schools"])
 
 @router.get("", response_model=PaginatedResponse)
-def get_schools(id: Optional[int] = None, page: int = Query(1, ge=1), pageSize: int = Query(10, ge=1, le=100)):
-    if id is not None:
-        item = get_single_item("schools", id)
-        if not item:
-            raise HTTPException(status_code=404, detail="School not found")
-        return {
-            "data": [item],
-            "totalRecords": 1,
-            "page": 1,
-            "pageSize": 1,
-            "skippedRecords": 0
-        }
-    return get_table_data("schools", page=page, page_size=pageSize)
+def get_schools(
+    id: Optional[int] = None,
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
+):
+    return list_items(
+        "schools",
+        "School not found",
+        id=id,
+        page=page,
+        page_size=pageSize,
+        search=search,
+    )
 
 @router.post("")
 def create_school(item: ItemCreate):
@@ -27,14 +29,12 @@ def create_school(item: ItemCreate):
 
 @router.put("/{id}")
 def update_school(id: int, item: ItemUpdate):
-    if not update_item("schools", id, item.attributes):
-        raise HTTPException(status_code=404, detail="School not found")
+    update_item_or_404("schools", id, item.attributes, "School not found")
     return {"message": "School updated"}
 
 @router.delete("/{id}")
 def delete_school(id: int):
-    if delete_item("schools", id=id) == 0:
-        raise HTTPException(status_code=404, detail="School not found")
+    delete_item_or_404("schools", id, "School not found")
     return {"message": "School deleted"}
 
 @router.post("/bulk-delete")

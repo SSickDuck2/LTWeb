@@ -1,11 +1,13 @@
+from math import ceil
+from typing import Any, Dict, Optional
+
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
-import requests
-import os
 
+from backend.database import get_single_item, get_subject_from_curriculum, get_table_data
 from backend.routes.schools import router as schools_router
 from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
@@ -25,265 +27,264 @@ app.include_router(majors_router, prefix="/api")
 app.include_router(curricula_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
 
+
+def _build_meta(payload: Dict[str, Any], page_size: int) -> Dict[str, Any]:
+    resolved_page = payload.get("page", 1)
+    resolved_page_size = payload.get("pageSize", page_size)
+    total = payload.get("totalRecords", 0)
+    total_pages = max(1, ceil(total / resolved_page_size)) if resolved_page_size else 1
+
+    return {
+        "page": resolved_page,
+        "pageSize": resolved_page_size,
+        "total": total,
+        "totalPages": total_pages,
+        "hasPrev": resolved_page > 1,
+        "hasNext": resolved_page < total_pages,
+    }
+
+
+def _resolve_name(table: str, item_id: Optional[int]) -> str:
+    if item_id is None:
+        return "Unknown"
+    item = get_single_item(table, item_id)
+    if not item:
+        return "Unknown"
+    return item.get("attributes", {}).get("name", "Unknown")
+
+
+def _parse_optional_id(value: Optional[str]) -> Optional[int]:
+    # Keep old bookmarked URLs like "school_id=None" from breaking request validation.
+    if value in (None, "", "None", "null"):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
 # Frontend routes
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, page: int = Query(1, ge=1), search: str = Query(None)):
+def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Query(None)):
     """Home page - list of schools"""
     try:
-        params = {"page": page, "pageSize": 10}
-        response = requests.get("http://127.0.0.1:8000/api/schools", params=params)
-        data = response.json()
-        
+        data = get_table_data("schools", page=page, page_size=10, search=search)
+
         return templates.TemplateResponse(
             "schools.html",
             {
                 "request": request,
                 "schools": data.get("data", []),
-                "meta": {
-                    "page": data.get("page", 1),
-                    "pageSize": data.get("pageSize", 10),
-                    "total": data.get("totalRecords", 0)
-                },
-                "search": search
-            }
+                "meta": _build_meta(data, 10),
+                "search": search,
+            },
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
 
 
 @app.get("/faculties", response_class=HTMLResponse)
-def faculties_page(request: Request, school_id: int = Query(...), page: int = Query(1, ge=1), search: str = Query(None)):
+def faculties_page(
+    request: Request,
+    school_id: int = Query(...),
+    page: int = Query(1, ge=1),
+    search: Optional[str] = Query(None),
+):
     """Faculties page"""
     try:
-        # Get school info
-        school_response = requests.get(f"http://127.0.0.1:8000/api/schools?id={school_id}")
-        school_data = school_response.json()
-        school_name = school_data["data"][0]["attributes"]["name"] if school_data.get("data") else "Unknown"
-        
-        # Get faculties
-        params = {"page": page, "pageSize": 10, "school_id": school_id}
-        response = requests.get("http://127.0.0.1:8000/api/faculties", params=params)
-        data = response.json()
-        
+        school_name = _resolve_name("schools", school_id)
+        data = get_table_data(
+            "faculties",
+            page=page,
+            page_size=10,
+            filters={"school_id": school_id},
+            search=search,
+        )
+
         return templates.TemplateResponse(
             "faculties.html",
             {
                 "request": request,
                 "faculties": data.get("data", []),
-                "meta": {
-                    "page": data.get("page", 1),
-                    "pageSize": data.get("pageSize", 10),
-                    "total": data.get("totalRecords", 0)
-                },
+                "meta": _build_meta(data, 10),
                 "school_id": school_id,
                 "school_name": school_name,
-                "search": search
-            }
+                "search": search,
+            },
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
 
 
 @app.get("/majors", response_class=HTMLResponse)
-def majors_page(request: Request, faculty_id: int = Query(...), school_id: int = Query(None), page: int = Query(1, ge=1), search: str = Query(None)):
+def majors_page(
+    request: Request,
+    faculty_id: int = Query(...),
+    school_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    search: Optional[str] = Query(None),
+):
     """Majors page"""
     try:
-        # Get school and faculty info
-        faculty_response = requests.get(f"http://127.0.0.1:8000/api/faculties?id={faculty_id}")
-        faculty_data = faculty_response.json()
-        faculty_name = faculty_data["data"][0]["attributes"]["name"] if faculty_data.get("data") else "Unknown"
-        
-        # Get majors
-        params = {"page": page, "pageSize": 10, "faculty_id": faculty_id}
-        response = requests.get("http://127.0.0.1:8000/api/majors", params=params)
-        data = response.json()
-        
-        # Get school name if not provided
-        school_name = "Unknown"
-        if school_id:
-            school_response = requests.get(f"http://127.0.0.1:8000/api/schools?id={school_id}")
-            school_data = school_response.json()
-            school_name = school_data["data"][0]["attributes"]["name"] if school_data.get("data") else "Unknown"
-        
+        school_id_int = _parse_optional_id(school_id)
+        faculty_name = _resolve_name("faculties", faculty_id)
+        school_name = _resolve_name("schools", school_id_int)
+        data = get_table_data(
+            "majors",
+            page=page,
+            page_size=10,
+            filters={"faculty_id": faculty_id},
+            search=search,
+        )
+
         return templates.TemplateResponse(
             "majors.html",
             {
                 "request": request,
                 "majors": data.get("data", []),
-                "meta": {
-                    "page": data.get("page", 1),
-                    "pageSize": data.get("pageSize", 10),
-                    "total": data.get("totalRecords", 0)
-                },
+                "meta": _build_meta(data, 10),
                 "faculty_id": faculty_id,
                 "faculty_name": faculty_name,
-                "school_id": school_id,
+                "school_id": school_id_int,
                 "school_name": school_name,
-                "search": search
-            }
+                "search": search,
+            },
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
 
 
 @app.get("/curricula", response_class=HTMLResponse)
-def curricula_page(request: Request, major_id: int = Query(...), faculty_id: int = Query(None), school_id: int = Query(None), page: int = Query(1, ge=1), search: str = Query(None)):
+def curricula_page(
+    request: Request,
+    major_id: int = Query(...),
+    faculty_id: Optional[str] = Query(None),
+    school_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    search: Optional[str] = Query(None),
+):
     """Curricula page"""
     try:
-        # Get major info
-        major_response = requests.get(f"http://127.0.0.1:8000/api/majors?id={major_id}")
-        major_data = major_response.json()
-        major_name = major_data["data"][0]["attributes"]["name"] if major_data.get("data") else "Unknown"
-        
-        # Get curricula
-        params = {"page": page, "pageSize": 10, "major_id": major_id}
-        response = requests.get("http://127.0.0.1:8000/api/curricula", params=params)
-        data = response.json()
-        
-        # Get faculty and school names
-        faculty_name = "Unknown"
-        if faculty_id:
-            faculty_response = requests.get(f"http://127.0.0.1:8000/api/faculties?id={faculty_id}")
-            faculty_data = faculty_response.json()
-            faculty_name = faculty_data["data"][0]["attributes"]["name"] if faculty_data.get("data") else "Unknown"
-        
-        school_name = "Unknown"
-        if school_id:
-            school_response = requests.get(f"http://127.0.0.1:8000/api/schools?id={school_id}")
-            school_data = school_response.json()
-            school_name = school_data["data"][0]["attributes"]["name"] if school_data.get("data") else "Unknown"
-        
+        faculty_id_int = _parse_optional_id(faculty_id)
+        school_id_int = _parse_optional_id(school_id)
+        major_name = _resolve_name("majors", major_id)
+        faculty_name = _resolve_name("faculties", faculty_id_int)
+        school_name = _resolve_name("schools", school_id_int)
+        data = get_table_data(
+            "curricula",
+            page=page,
+            page_size=10,
+            filters={"major_id": major_id},
+            search=search,
+        )
+
         return templates.TemplateResponse(
             "curricula.html",
             {
                 "request": request,
                 "curricula": data.get("data", []),
-                "meta": {
-                    "page": data.get("page", 1),
-                    "pageSize": data.get("pageSize", 10),
-                    "total": data.get("totalRecords", 0)
-                },
+                "meta": _build_meta(data, 10),
                 "major_id": major_id,
                 "major_name": major_name,
-                "faculty_id": faculty_id,
+                "faculty_id": faculty_id_int,
                 "faculty_name": faculty_name,
-                "school_id": school_id,
+                "school_id": school_id_int,
                 "school_name": school_name,
-                "search": search
-            }
+                "search": search,
+            },
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
 
 
 @app.get("/subjects", response_class=HTMLResponse)
-def subjects_page(request: Request, curricula_id: int = Query(...), major_id: int = Query(None), faculty_id: int = Query(None), school_id: int = Query(None), page: int = Query(1, ge=1), search: str = Query(None)):
+def subjects_page(
+    request: Request,
+    curricula_id: int = Query(...),
+    major_id: Optional[str] = Query(None),
+    faculty_id: Optional[str] = Query(None),
+    school_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    search: Optional[str] = Query(None),
+):
     """Subjects page"""
     try:
-        # Get curriculum info
-        curriculum_response = requests.get(f"http://127.0.0.1:8000/api/curricula?id={curricula_id}")
-        curriculum_data = curriculum_response.json()
-        curriculum_name = curriculum_data["data"][0]["attributes"]["name"] if curriculum_data.get("data") else "Unknown"
-        
-        # Get subjects
-        params = {"page": page, "pageSize": 20, "curricula_id": curricula_id}
-        response = requests.get("http://127.0.0.1:8000/api/subjects", params=params)
-        data = response.json()
-        
-        # Get other names
-        major_name = "Unknown"
-        if major_id:
-            major_response = requests.get(f"http://127.0.0.1:8000/api/majors?id={major_id}")
-            major_data = major_response.json()
-            major_name = major_data["data"][0]["attributes"]["name"] if major_data.get("data") else "Unknown"
-        
-        faculty_name = "Unknown"
-        if faculty_id:
-            faculty_response = requests.get(f"http://127.0.0.1:8000/api/faculties?id={faculty_id}")
-            faculty_data = faculty_response.json()
-            faculty_name = faculty_data["data"][0]["attributes"]["name"] if faculty_data.get("data") else "Unknown"
-        
-        school_name = "Unknown"
-        if school_id:
-            school_response = requests.get(f"http://127.0.0.1:8000/api/schools?id={school_id}")
-            school_data = school_response.json()
-            school_name = school_data["data"][0]["attributes"]["name"] if school_data.get("data") else "Unknown"
-        
+        major_id_int = _parse_optional_id(major_id)
+        faculty_id_int = _parse_optional_id(faculty_id)
+        school_id_int = _parse_optional_id(school_id)
+        curriculum_name = _resolve_name("curricula", curricula_id)
+        major_name = _resolve_name("majors", major_id_int)
+        faculty_name = _resolve_name("faculties", faculty_id_int)
+        school_name = _resolve_name("schools", school_id_int)
+        data = get_table_data(
+            "subjects",
+            page=page,
+            page_size=20,
+            filters={"curricula_id": curricula_id},
+            search=search,
+        )
+
         return templates.TemplateResponse(
             "subjects.html",
             {
                 "request": request,
                 "subjects": data.get("data", []),
-                "meta": {
-                    "page": data.get("page", 1),
-                    "pageSize": data.get("pageSize", 20),
-                    "total": data.get("totalRecords", 0)
-                },
+                "meta": _build_meta(data, 20),
                 "curricula_id": curricula_id,
                 "curriculum_name": curriculum_name,
-                "major_id": major_id,
+                "major_id": major_id_int,
                 "major_name": major_name,
-                "faculty_id": faculty_id,
+                "faculty_id": faculty_id_int,
                 "faculty_name": faculty_name,
-                "school_id": school_id,
+                "school_id": school_id_int,
                 "school_name": school_name,
-                "search": search
-            }
+                "search": search,
+            },
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
 
 
 @app.get("/syllabus", response_class=HTMLResponse)
-def syllabus_page(request: Request, subject_id: int = Query(...), curricula_id: int = Query(None), major_id: int = Query(None), faculty_id: int = Query(None), school_id: int = Query(None)):
+def syllabus_page(
+    request: Request,
+    subject_id: int = Query(...),
+    curricula_id: Optional[str] = Query(None),
+    major_id: Optional[str] = Query(None),
+    faculty_id: Optional[str] = Query(None),
+    school_id: Optional[str] = Query(None),
+):
     """Subject details/syllabus page"""
     try:
-        # Get subject info
-        subject_response = requests.get(f"http://127.0.0.1:8000/api/subjects?id={subject_id}")
-        subject_data = subject_response.json()
-        subject = subject_data["data"][0] if subject_data.get("data") else None
-        subject_name = subject["attributes"]["name"] if subject else "Unknown"
-        
-        # Get other names
-        curriculum_name = "Unknown"
-        if curricula_id:
-            curriculum_response = requests.get(f"http://127.0.0.1:8000/api/curricula?id={curricula_id}")
-            curriculum_data = curriculum_response.json()
-            curriculum_name = curriculum_data["data"][0]["attributes"]["name"] if curriculum_data.get("data") else "Unknown"
-        
-        major_name = "Unknown"
-        if major_id:
-            major_response = requests.get(f"http://127.0.0.1:8000/api/majors?id={major_id}")
-            major_data = major_response.json()
-            major_name = major_data["data"][0]["attributes"]["name"] if major_data.get("data") else "Unknown"
-        
-        faculty_name = "Unknown"
-        if faculty_id:
-            faculty_response = requests.get(f"http://127.0.0.1:8000/api/faculties?id={faculty_id}")
-            faculty_data = faculty_response.json()
-            faculty_name = faculty_data["data"][0]["attributes"]["name"] if faculty_data.get("data") else "Unknown"
-        
-        school_name = "Unknown"
-        if school_id:
-            school_response = requests.get(f"http://127.0.0.1:8000/api/schools?id={school_id}")
-            school_data = school_response.json()
-            school_name = school_data["data"][0]["attributes"]["name"] if school_data.get("data") else "Unknown"
-        
+        curricula_id_int = _parse_optional_id(curricula_id)
+        major_id_int = _parse_optional_id(major_id)
+        faculty_id_int = _parse_optional_id(faculty_id)
+        school_id_int = _parse_optional_id(school_id)
+        subject = None
+        if curricula_id_int is not None:
+            subject = get_subject_from_curriculum(curricula_id_int, subject_id)
+        if not subject:
+            subject = get_single_item("subjects", subject_id)
+        subject_name = subject.get("attributes", {}).get("name", "Unknown") if subject else "Unknown"
+        curriculum_name = _resolve_name("curricula", curricula_id_int)
+        major_name = _resolve_name("majors", major_id_int)
+        faculty_name = _resolve_name("faculties", faculty_id_int)
+        school_name = _resolve_name("schools", school_id_int)
+
         return templates.TemplateResponse(
             "syllabus.html",
             {
                 "request": request,
                 "subject": subject,
                 "subject_name": subject_name,
-                "curricula_id": curricula_id,
+                "curricula_id": curricula_id_int,
                 "curriculum_name": curriculum_name,
-                "major_id": major_id,
+                "major_id": major_id_int,
                 "major_name": major_name,
-                "faculty_id": faculty_id,
+                "faculty_id": faculty_id_int,
                 "faculty_name": faculty_name,
-                "school_id": school_id,
-                "school_name": school_name
-            }
+                "school_id": school_id_int,
+                "school_name": school_name,
+            },
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"

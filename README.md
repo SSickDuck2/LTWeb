@@ -7,6 +7,7 @@ This repository includes a Python script that fetches curriculum data from NEU's
 - [fetch_and_save.py](fetch_and_save.py) — Script to fetch and save data from APIs to SQLite
 - [api.py](api.py) — FastAPI main application with both API routes and frontend routes
 - [backend/](backend/) — Modular backend with route handlers and models
+- [backend/routes/common.py](backend/routes/common.py) — Shared helpers for list/update/delete route behavior
 - [templates/](templates/) — Jinja2 HTML templates for frontend
 - [static/](static/) — CSS and static assets
 - [database/](database/) — SQLite database file
@@ -14,7 +15,9 @@ This repository includes a Python script that fetches curriculum data from NEU's
 
 ## Database Schema
 
-Tables created: `schools`, `faculties`, `majors`, `curricula`, `subjects` (with indexes for search performance)
+Tables created: `schools`, `faculties`, `majors`, `curricula`, `subjects`, `curriculum_subjects`.
+
+The `subjects` table stores unique subject entities, while `curriculum_subjects` stores many-to-many links and curriculum-specific subject metadata (semester, requirement, knowledge block, note, etc.).
 
 ## Quick Start
 
@@ -74,6 +77,7 @@ Each page includes:
 - `page` — Page number (default: 1)
 - `pageSize` — Items per page (default: 10, max: 100)
 - `id` — Get single item by ID (e.g., `?id=25`)
+- `search` — Search text in item attributes
 - Filter parameters: `school_id`, `faculty_id`, `major_id`, `curricula_id`
 
 ### CRUD Operations
@@ -114,14 +118,11 @@ All API responses follow this format:
 - **Frontend:** Jinja2 templates, HTML/CSS
 - **Database:** SQLite3
 - **Data Fetching:** Requests library
-- **DELETE** `/schools?ids=1,2,3`, etc. — Bulk delete
 
-5. Open the resulting database with DB Browser for SQLite.
+## Notes
 
-Notes
-
-- The script expects Strapi-style responses (the NEU endpoints provided). It stores the API `attributes` JSON and the raw object into simple tables: `schools`, `faculties`, `majors`, `curricula`, `subjects`.
-- Subjects are linked to curricula via `curricula_id`.
+- The script expects Strapi-style responses (the NEU endpoints provided). It stores the API `attributes` JSON and the raw object into normalized tables managed via SQLAlchemy ORM.
+- Subjects are linked to curricula via `curriculum_subjects` (many-to-many), not a single `curricula_id` on `subjects`.
+- Bulk delete is available via `/api/{resource}/bulk-delete`.
 - If you want a different DB path, pass `--db PATH`.
 - If you want me to adapt the schema to specific columns (instead of storing attributes JSON), tell me which fields you need and I will update the script.
-# LTWeb

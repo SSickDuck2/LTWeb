@@ -1,25 +1,28 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from typing import List, Optional
 from backend.models import ItemCreate, ItemUpdate, PaginatedResponse
-from backend.database import get_table_data, create_item, update_item, delete_item, get_single_item
+from backend.database import create_item, delete_item
+from backend.routes.common import delete_item_or_404, list_items, update_item_or_404
 
 router = APIRouter(prefix="/curricula", tags=["curricula"])
 
 @router.get("", response_model=PaginatedResponse)
-def get_curricula(id: Optional[int] = None, page: int = Query(1, ge=1), pageSize: int = Query(10, ge=1, le=100), major_id: Optional[int] = None):
-    if id is not None:
-        item = get_single_item("curricula", id)
-        if not item:
-            raise HTTPException(status_code=404, detail="Curriculum not found")
-        return {
-            "data": [item],
-            "totalRecords": 1,
-            "page": 1,
-            "pageSize": 1,
-            "skippedRecords": 0
-        }
-    filters = {"major_id": major_id} if major_id else None
-    return get_table_data("curricula", page=page, page_size=pageSize, filters=filters)
+def get_curricula(
+    id: Optional[int] = None,
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(10, ge=1, le=100),
+    major_id: Optional[int] = None,
+    search: Optional[str] = Query(None),
+):
+    return list_items(
+        "curricula",
+        "Curriculum not found",
+        id=id,
+        page=page,
+        page_size=pageSize,
+        filters={"major_id": major_id} if major_id is not None else None,
+        search=search,
+    )
 
 @router.post("")
 def create_curriculum(item: ItemCreate, major_id: Optional[int] = None):
@@ -28,14 +31,12 @@ def create_curriculum(item: ItemCreate, major_id: Optional[int] = None):
 
 @router.put("/{id}")
 def update_curriculum(id: int, item: ItemUpdate):
-    if not update_item("curricula", id, item.attributes):
-        raise HTTPException(status_code=404, detail="Curriculum not found")
+    update_item_or_404("curricula", id, item.attributes, "Curriculum not found")
     return {"message": "Curriculum updated"}
 
 @router.delete("/{id}")
 def delete_curriculum(id: int):
-    if delete_item("curricula", id=id) == 0:
-        raise HTTPException(status_code=404, detail="Curriculum not found")
+    delete_item_or_404("curricula", id, "Curriculum not found")
     return {"message": "Curriculum deleted"}
 
 @router.post("/bulk-delete")
