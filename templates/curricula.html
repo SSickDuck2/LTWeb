@@ -2,11 +2,22 @@
 
 {% block title %}Chương Trình Đào Tạo - NEU Curriculum{% endblock %}
 
+{% set nav_qs -%}{% if faculty_id is not none %}&faculty_id={{ faculty_id }}{% endif %}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}{%- endset %}
+{% set search_qs -%}{% if search %}&search={{ search|urlencode }}{% endif %}{%- endset %}
+
 {% block breadcrumb %}
 <div class="breadcrumb">
     <a href="/">Trang chủ</a> <span>/</span> 
-    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span> 
-    <a href="/majors?faculty_id={{ faculty_id }}">{{ faculty_name }}</a> <span>/</span> 
+    {% if school_id is not none %}
+    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span>
+    {% else %}
+    <span>{{ school_name }}</span> <span>/</span>
+    {% endif %}
+    {% if faculty_id is not none %}
+    <a href="/majors?faculty_id={{ faculty_id }}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}">{{ faculty_name }}</a> <span>/</span>
+    {% else %}
+    <span>{{ faculty_name }}</span> <span>/</span>
+    {% endif %}
     <strong>{{ major_name }}</strong> <span>/</span> <strong>Chương Trình Đào Tạo</strong>
 </div>
 {% endblock %}
@@ -16,10 +27,16 @@
     <div class="filter-group">
         <form method="GET" style="display: flex; gap: 10px; align-items: center;">
             <input type="hidden" name="major_id" value="{{ major_id }}">
+            {% if faculty_id is not none %}
+            <input type="hidden" name="faculty_id" value="{{ faculty_id }}">
+            {% endif %}
+            {% if school_id is not none %}
+            <input type="hidden" name="school_id" value="{{ school_id }}">
+            {% endif %}
             <label for="search">Tìm kiếm:</label>
             <input type="text" id="search" name="search" placeholder="Nhập tên chương trình..." value="{{ search or '' }}" style="flex: 1; max-width: 300px;">
             <button type="submit">Tìm kiếm</button>
-            <a href="/curricula?major_id={{ major_id }}" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
+            <a href="/curricula?major_id={{ major_id }}{{ nav_qs }}" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
         </form>
     </div>
 </div>
@@ -40,7 +57,7 @@
             {% for curriculum in curricula %}
             <tr>
                 <td>
-                    <a href="/subjects?curricula_id={{ curriculum.id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">
+                    <a href="/subjects?curricula_id={{ curriculum.id }}&major_id={{ major_id }}{{ nav_qs }}" class="row-link">
                         {{ curriculum.attributes.name }}
                     </a>
                 </td>
@@ -48,7 +65,7 @@
                     <span class="description">{{ curriculum.attributes.description[:100] if curriculum.attributes.description else 'Không có mô tả' }}</span>
                 </td>
                 <td>
-                    <a href="/subjects?curricula_id={{ curriculum.id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">Xem → </a>
+                    <a href="/subjects?curricula_id={{ curriculum.id }}&major_id={{ major_id }}{{ nav_qs }}" class="row-link">Xem → </a>
                 </td>
             </tr>
             {% endfor %}
@@ -57,16 +74,16 @@
 
     {% if meta.total > meta.pageSize %}
     <div class="pagination">
-        {% if meta.page > 1 %}
-        <a href="/curricula?major_id={{ major_id }}&page=1" class="page-link">« Trang đầu</a>
-        <a href="/curricula?major_id={{ major_id }}&page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
+        {% if meta.hasPrev %}
+        <a href="/curricula?major_id={{ major_id }}{{ nav_qs }}{{ search_qs }}&page=1" class="page-link">« Trang đầu</a>
+        <a href="/curricula?major_id={{ major_id }}{{ nav_qs }}{{ search_qs }}&page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
         {% endif %}
 
-        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ (meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0) }}</strong></span>
+        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ meta.totalPages }}</strong></span>
 
-        {% if meta.page < ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) %}
-        <a href="/curricula?major_id={{ major_id }}&page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
-        <a href="/curricula?major_id={{ major_id }}&page={{ ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) }}" class="page-link">Trang cuối »</a>
+        {% if meta.hasNext %}
+        <a href="/curricula?major_id={{ major_id }}{{ nav_qs }}{{ search_qs }}&page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
+        <a href="/curricula?major_id={{ major_id }}{{ nav_qs }}{{ search_qs }}&page={{ meta.totalPages }}" class="page-link">Trang cuối »</a>
         {% endif %}
     </div>
     {% endif %}
