@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import sys
 from typing import Any, Dict, List, Optional, Type
 from urllib.parse import urlparse, parse_qs
 
 import requests
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.orm import Session
 
 from backend.orm import (
@@ -16,8 +15,9 @@ from backend.orm import (
     Faculty,
     Major,
     School,
+    SessionLocal,
     Subject,
-    create_session_factory,
+    create_schema,
 )
 
 
@@ -66,10 +66,6 @@ TABLE_MODEL_MAP: Dict[str, Type[Any]] = {
 }
 
 
-def _json_text(value: Dict[str, Any]) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
 def upsert_item(
     db: Session,
     table: str,
@@ -82,8 +78,8 @@ def upsert_item(
     model = TABLE_MODEL_MAP[table]
     payload: Dict[str, Any] = {
         "id": row_id,
-        "attributes": _json_text(attributes),
-        "raw": _json_text(raw),
+        "attributes": attributes,
+        "raw": raw,
     }
 
     if parent_col and parent_id is not None and table != "subjects":
@@ -97,7 +93,7 @@ def upsert_item(
     if parent_col and parent_id is not None and table != "subjects":
         update_set[parent_col] = parent_id
 
-    stmt = sqlite_insert(model.__table__).values(**payload)
+    stmt = postgresql_insert(model.__table__).values(**payload)
     stmt = stmt.on_conflict_do_update(index_elements=[model.__table__.c.id], set_=update_set)
     db.execute(stmt)
 
@@ -111,10 +107,10 @@ def upsert_curriculum_subject_link(
     payload = {
         "curricula_id": curricula_id,
         "subject_id": subject_id,
-        "link_attributes": _json_text(link_attributes),
+        "link_attributes": link_attributes,
     }
 
-    stmt = sqlite_insert(CurriculumSubject.__table__).values(**payload)
+    stmt = postgresql_insert(CurriculumSubject.__table__).values(**payload)
     stmt = stmt.on_conflict_do_update(
         index_elements=[
             CurriculumSubject.__table__.c.curricula_id,
@@ -204,10 +200,13 @@ def _backfill_links_from_curricula_in_db(db: Session) -> int:
     total = 0
 
     for curricula_id, attrs_text in rows:
-        try:
-            attrs = json.loads(attrs_text) if attrs_text else {}
-        except json.JSONDecodeError:
-            continue
+        if isinstance(attrs_text, dict):
+            attrs = attrs_text
+        else:
+            try:
+                attrs = json.loads(attrs_text) if attrs_text else {}
+            except json.JSONDecodeError:
+                continue
 
         item = {
             "id": curricula_id,
@@ -219,8 +218,7 @@ def _backfill_links_from_curricula_in_db(db: Session) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fetch 3 NEU curriculum APIs and store into SQLite')
-    parser.add_argument('--db', default='database/syllabus.db', help='SQLite DB path')
+    parser = argparse.ArgumentParser(description='Fetch 3 NEU curriculum APIs and upsert to Supabase/PostgreSQL')
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
@@ -233,13 +231,12 @@ def main():
     session = requests.Session()
 
     try:
-        runtime_engine, SessionFactory = create_session_factory(args.db)
+        create_schema()
     except Exception as e:
-        print('Could not open database:', e)
-        print('Hint: Make sure DB Browser for SQLite is CLOSED.')
+        print('Could not initialize database schema:', e)
         sys.exit(1)
 
-    with SessionFactory() as db:
+    with SessionLocal() as db:
         print('Fetching schools...')
         schools = fetch_all(session, endpoints['schools'])
         n_schools = process_and_store(db, schools, 'schools')
@@ -373,8 +370,6 @@ def main():
         print(f'Backfilled/updated {backfilled_links} curriculum-subject links (from stored curricula JSON)')
 
         db.commit()
-
-    runtime_engine.dispose()
 
 
 if __name__ == '__main__':

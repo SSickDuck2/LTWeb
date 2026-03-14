@@ -1,16 +1,16 @@
 # NEU Curriculum Fetcher
 
-This repository includes a Python script that fetches curriculum data from NEU's APIs, stores them into an SQLite database, and provides both a REST API and a web frontend (using Jinja2 templates) for browsing the curriculum data.
+This repository includes a Python script that fetches curriculum data from NEU's APIs, stores them into Supabase PostgreSQL, and provides both a REST API and a web frontend (using Jinja2 templates) for browsing the curriculum data.
 
 ## Project Structure
 
-- [fetch_and_save.py](fetch_and_save.py) — Script to fetch and save data from APIs to SQLite
+- [fetch_and_save.py](fetch_and_save.py) — Script to fetch and upsert data from NEU APIs into Supabase PostgreSQL
 - [api.py](api.py) — FastAPI main application with both API routes and frontend routes
-- [backend/](backend/) — Modular backend with route handlers and models
+- [backend/](backend/) — Modular backend with route handlers and ORM models
 - [backend/routes/common.py](backend/routes/common.py) — Shared helpers for list/update/delete route behavior
 - [templates/](templates/) — Jinja2 HTML templates for frontend
 - [static/](static/) — CSS and static assets
-- [database/](database/) — SQLite database file
+- [migrate_to_supabase.py](migrate_to_supabase.py) — Optional one-time migration from legacy SQLite to Supabase
 - [requirements.txt](requirements.txt) — Python dependencies
 
 ## Database Schema
@@ -26,12 +26,22 @@ The `subjects` table stores unique subject entities, while `curriculum_subjects`
 python -m pip install -r requirements.txt
 ```
 
-2. **Fetch and save data from APIs:**
+2. **Configure Supabase connection:**
 ```bash
-python fetch_and_save.py --db database/syllabus.db
+copy .env.example .env
 ```
 
-3. **Run the server:**
+Inside `.env` set your connection:
+```env
+SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<password>@aws-0-xxx.pooler.supabase.com:5432/postgres
+```
+
+3. **Fetch and upsert data from NEU APIs:**
+```bash
+python fetch_and_save.py
+```
+
+4. **Run the server:**
 ```bash
 python api.py
 ```
@@ -40,10 +50,51 @@ Or with uvicorn:
 uvicorn api:app --reload
 ```
 
-4. **Access the application:**
-   - **Web Frontend:** http://127.0.0.1:8000/
-   - **API Documentation:** http://127.0.0.1:8000/docs
-   - **OpenAPI Schema:** http://127.0.0.1:8000/openapi.json
+5. **Access the application:**
+- **Web Frontend:** http://127.0.0.1:8000/
+- **API Documentation:** http://127.0.0.1:8000/docs
+- **OpenAPI Schema:** http://127.0.0.1:8000/openapi.json
+- **Health Check:** http://127.0.0.1:8000/api/health
+
+## Legacy SQLite Migration (Optional)
+
+If you still have an old `database/syllabus.db`, you can copy that data to Supabase PostgreSQL.
+
+1. Install dependencies:
+```bash
+python -m pip install -r requirements.txt
+```
+
+2. Create `.env` from `.env.example`, then fill Supabase DB URL (from Supabase dashboard -> Connect -> Connection string):
+```bash
+copy .env.example .env
+```
+
+Inside `.env`:
+```env
+SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<password>@aws-0-xxx.pooler.supabase.com:6543/postgres
+```
+
+Alternative format is also supported:
+```env
+user=postgres.<project-ref>
+password=<your-password>
+host=aws-0-xxx.pooler.supabase.com
+port=5432
+dbname=postgres
+```
+
+3. Run migration:
+```bash
+python migrate_to_supabase.py --sqlite-db database/syllabus.db --truncate
+```
+
+Notes:
+- `--truncate` clears target tables before import. Remove this flag if you only want upsert/update behavior.
+- The script auto-creates tables/indexes (`schools`, `faculties`, `majors`, `curricula`, `subjects`, `curriculum_subjects`) if they do not exist.
+- JSON text columns from SQLite are stored as `jsonb` in PostgreSQL.
+- The script auto-loads `.env` and reads `SUPABASE_DB_URL` (also supports aliases `SUPABASE_URL` and `SUPABSE_URL`).
+- If `SUPABASE_DB_URL` is not a full URL, the script can assemble connection info from `user/password/host/port/dbname`.
 
 ## Frontend Navigation
 
@@ -67,6 +118,7 @@ Each page includes:
 **Note:** All API endpoints are prefixed with `/api/`
 
 ### List & Filter
+- **GET** `/api/health` — Quick health check (API + Supabase connectivity)
 - **GET** `/api/schools` — List all schools with pagination
 - **GET** `/api/faculties` — List faculties (filter with `?school_id={id}`)
 - **GET** `/api/majors` — List majors (filter with `?faculty_id={id}`)
@@ -116,7 +168,7 @@ All API responses follow this format:
 
 - **Backend:** FastAPI, Uvicorn, Pydantic
 - **Frontend:** Jinja2 templates, HTML/CSS
-- **Database:** SQLite3
+- **Database:** Supabase PostgreSQL
 - **Data Fetching:** Requests library
 
 ## Notes
@@ -124,5 +176,5 @@ All API responses follow this format:
 - The script expects Strapi-style responses (the NEU endpoints provided). It stores the API `attributes` JSON and the raw object into normalized tables managed via SQLAlchemy ORM.
 - Subjects are linked to curricula via `curriculum_subjects` (many-to-many), not a single `curricula_id` on `subjects`.
 - Bulk delete is available via `/api/{resource}/bulk-delete`.
-- If you want a different DB path, pass `--db PATH`.
+- Runtime backend now uses Supabase/PostgreSQL connection from `.env` (`SUPABASE_DB_URL` or `DATABASE_URL`).
 - If you want me to adapt the schema to specific columns (instead of storing attributes JSON), tell me which fields you need and I will update the script.

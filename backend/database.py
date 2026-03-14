@@ -2,7 +2,7 @@ import json
 from contextlib import contextmanager
 from typing import Any, Dict, Generator, List, Optional, Set, Type
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Text, cast, delete, func, select, text
 from sqlalchemy.orm import Session
 
 from backend.orm import (
@@ -41,12 +41,28 @@ def _validate_table(table: str) -> None:
 
 
 def _parse_json(text: Optional[str]) -> Dict[str, Any]:
+    if isinstance(text, dict):
+        return text
+    if isinstance(text, list):
+        return {}
     if not text:
         return {}
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         return {}
+
+
+def check_db_connection() -> Dict[str, Any]:
+    with get_db() as db:
+        db.execute(text("SELECT 1"))
+        schools_count = int(db.scalar(select(func.count()).select_from(School)) or 0)
+
+    return {
+        "database": "supabase-postgresql",
+        "status": "ok",
+        "schoolsCount": schools_count,
+    }
 
 
 def _serialize_item(model_instance: Any) -> Dict[str, Any]:
@@ -103,7 +119,7 @@ def _build_query(
 
     normalized_search = (search or "").strip()
     if normalized_search:
-        query = query.where(model.attributes.like(f"%{normalized_search}%"))
+        query = query.where(cast(model.attributes, Text).like(f"%{normalized_search}%"))
 
     return query
 
@@ -125,7 +141,7 @@ def get_subjects_by_curriculum(
         )
 
         if normalized_search:
-            query = query.where(Subject.attributes.like(f"%{normalized_search}%"))
+            query = query.where(cast(Subject.attributes, Text).like(f"%{normalized_search}%"))
 
         total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
         rows = db.execute(query.order_by(Subject.id).offset(offset).limit(page_size)).all()
@@ -214,13 +230,13 @@ def create_item(
     _validate_table(table)
 
     model = TABLE_MODELS[table]
-    attrs_text = json.dumps(attributes, ensure_ascii=False)
-    raw_text = json.dumps({"attributes": attributes}, ensure_ascii=False)
+    attrs_data = attributes
+    raw_data = {"attributes": attributes}
 
     with get_db() as db:
         payload = {
-            "attributes": attrs_text,
-            "raw": raw_text,
+            "attributes": attrs_data,
+            "raw": raw_data,
         }
 
         if table != "subjects" and parent_col and parent_id is not None:
@@ -236,7 +252,7 @@ def create_item(
         if table == "subjects" and parent_col == "curricula_id" and parent_id is not None:
             link = db.get(CurriculumSubject, (parent_id, created_id))
             if link is None:
-                db.add(CurriculumSubject(curricula_id=parent_id, subject_id=created_id, link_attributes="{}"))
+                db.add(CurriculumSubject(curricula_id=parent_id, subject_id=created_id, link_attributes={}))
 
         db.commit()
         return created_id
@@ -248,16 +264,16 @@ def update_item(table: str, id: int, attributes: Optional[Dict[str, Any]] = None
         return False
 
     model = TABLE_MODELS[table]
-    attrs_text = json.dumps(attributes, ensure_ascii=False)
-    raw_text = json.dumps({"attributes": attributes}, ensure_ascii=False)
+    attrs_data = attributes
+    raw_data = {"attributes": attributes}
 
     with get_db() as db:
         item = db.get(model, id)
         if item is None:
             return False
 
-        item.attributes = attrs_text
-        item.raw = raw_text
+        item.attributes = attrs_data
+        item.raw = raw_data
         db.commit()
         return True
 
@@ -328,30 +344,26 @@ def migrate_subject_links_from_curricula() -> int:
                 if subject_id is None or not isinstance(subject_attributes, dict):
                     continue
 
-                attrs_text = json.dumps(subject_attributes, ensure_ascii=False)
-                raw_text = json.dumps(subject, ensure_ascii=False)
-
                 existing_subject = db.get(Subject, subject_id)
                 if existing_subject is None:
-                    db.add(Subject(id=subject_id, attributes=attrs_text, raw=raw_text))
+                    db.add(Subject(id=subject_id, attributes=subject_attributes, raw=subject))
                 else:
-                    existing_subject.attributes = attrs_text
-                    existing_subject.raw = raw_text
+                    existing_subject.attributes = subject_attributes
+                    existing_subject.raw = subject
 
                 existing_link = db.get(CurriculumSubject, (curricula_id, subject_id))
-                link_attributes_text = json.dumps(link_attributes, ensure_ascii=False)
 
                 if existing_link is None:
                     db.add(
                         CurriculumSubject(
                             curricula_id=curricula_id,
                             subject_id=subject_id,
-                            link_attributes=link_attributes_text,
+                            link_attributes=link_attributes,
                         )
                     )
                     created_links += 1
                 else:
-                    existing_link.link_attributes = link_attributes_text
+                    existing_link.link_attributes = link_attributes
 
         db.commit()
 

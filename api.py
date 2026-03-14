@@ -1,13 +1,14 @@
 from math import ceil
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from backend.database import get_single_item, get_subject_from_curriculum, get_table_data
+from backend.database import check_db_connection, get_single_item, get_subject_from_curriculum, get_table_data
 from backend.routes.schools import router as schools_router
 from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
@@ -26,6 +27,21 @@ app.include_router(faculties_router, prefix="/api")
 app.include_router(majors_router, prefix="/api")
 app.include_router(curricula_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
+
+
+@app.get("/api/health")
+def health_check():
+    try:
+        db_state = check_db_connection()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Database connection failed: {exc}") from exc
+
+    return {
+        "status": "ok",
+        "service": "neu-curriculum-api",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "db": db_state,
+    }
 
 
 def _build_meta(payload: Dict[str, Any], page_size: int) -> Dict[str, Any]:
