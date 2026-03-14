@@ -2,6 +2,8 @@
 
 {% block title %}Các Trường - NEU Curriculum{% endblock %}
 
+{% set search_qs -%}{% if search %}&search={{ search|urlencode }}{% endif %}{%- endset %}
+
 {% block breadcrumb %}
 <div class="breadcrumb">
     <strong>Trang chủ</strong> <span>/</span> <strong>Các Trường</strong>
@@ -55,16 +57,16 @@
 
     {% if meta.total > meta.pageSize %}
     <div class="pagination">
-        {% if meta.page > 1 %}
-        <a href="/?page=1" class="page-link">« Trang đầu</a>
-        <a href="/?page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
+        {% if meta.hasPrev %}
+        <a href="/?page=1{{ search_qs }}" class="page-link">« Trang đầu</a>
+        <a href="/?page={{ meta.page - 1 }}{{ search_qs }}" class="page-link">‹ Trước</a>
         {% endif %}
 
-        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ (meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0) }}</strong></span>
+        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ meta.totalPages }}</strong></span>
 
-        {% if meta.page < ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) %}
-        <a href="/?page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
-        <a href="/?page={{ ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) }}" class="page-link">Trang cuối »</a>
+        {% if meta.hasNext %}
+        <a href="/?page={{ meta.page + 1 }}{{ search_qs }}" class="page-link">Sau ›</a>
+        <a href="/?page={{ meta.totalPages }}{{ search_qs }}" class="page-link">Trang cuối »</a>
         {% endif %}
     </div>
     {% endif %}
