@@ -1,8 +1,9 @@
 import json
 from contextlib import contextmanager
+from pyexpat import model
 from typing import Any, Dict, Generator, List, Optional, Set, Type
 
-from sqlalchemy import Text, cast, delete, func, select, text
+from sqlalchemy import Text, cast, delete, func, select, table, text
 from sqlalchemy.orm import Session
 
 from backend.orm import (
@@ -68,8 +69,10 @@ def check_db_connection() -> Dict[str, Any]:
 def _serialize_item(model_instance: Any) -> Dict[str, Any]:
     return {
         "id": model_instance.id,
-        "attributes": _parse_json(model_instance.attributes),
-        "raw": _parse_json(model_instance.raw),
+        "attributes": _parse_json(model_instance.attribute_vn), 
+        "raw": _parse_json(model_instance.raw_vn),
+        "attribute_en": _parse_json(model_instance.attribute_en),
+        "raw_en": _parse_json(model_instance.raw_en),
     }
 
 
@@ -119,7 +122,7 @@ def _build_query(
 
     normalized_search = (search or "").strip()
     if normalized_search:
-        query = query.where(cast(model.attributes, Text).like(f"%{normalized_search}%"))
+        query = query.where(cast(model.attribute_vn, Text).ilike(f"%{normalized_search}%"))
 
     return query
 
@@ -135,13 +138,13 @@ def get_subjects_by_curriculum(
 
     with get_db() as db:
         query = (
-            select(Subject, CurriculumSubject.link_attributes)
+            select(Subject, CurriculumSubject.link_attributes_vn)
             .join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
             .where(CurriculumSubject.curricula_id == curricula_id)
         )
 
         if normalized_search:
-            query = query.where(cast(Subject.attributes, Text).like(f"%{normalized_search}%"))
+            query = query.where(cast(Subject.attribute_vn, Text).ilike(f"%{normalized_search}%"))
 
         total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
         rows = db.execute(query.order_by(Subject.id).offset(offset).limit(page_size)).all()
@@ -165,7 +168,7 @@ def get_subjects_by_curriculum(
 def get_subject_from_curriculum(curricula_id: int, subject_id: int) -> Optional[Dict[str, Any]]:
     with get_db() as db:
         row = db.execute(
-            select(Subject, CurriculumSubject.link_attributes)
+            select(Subject, CurriculumSubject.link_attributes_vn)
             .join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
             .where(CurriculumSubject.curricula_id == curricula_id)
             .where(Subject.id == subject_id)
@@ -210,7 +213,12 @@ def get_table_data(
         total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
 
         model = TABLE_MODELS[table]
-        items = db.execute(query.order_by(model.id).offset(offset).limit(page_size)).scalars().all()
+        if table == "curricula":
+            order_clause = model.attribute_vn['name'].as_string().asc()
+        else:
+            order_clause = model.id.asc()
+
+        items = db.execute(query.order_by(order_clause).offset(offset).limit(page_size)).scalars().all()
 
         return {
             "data": [_serialize_item(item) for item in items],
@@ -235,8 +243,8 @@ def create_item(
 
     with get_db() as db:
         payload = {
-            "attributes": attrs_data,
-            "raw": raw_data,
+            "attribute_vn": attrs_data,
+            "raw_vn": raw_data,
         }
 
         if table != "subjects" and parent_col and parent_id is not None:
@@ -252,7 +260,7 @@ def create_item(
         if table == "subjects" and parent_col == "curricula_id" and parent_id is not None:
             link = db.get(CurriculumSubject, (parent_id, created_id))
             if link is None:
-                db.add(CurriculumSubject(curricula_id=parent_id, subject_id=created_id, link_attributes={}))
+                db.add(CurriculumSubject(curricula_id=parent_id, subject_id=created_id, link_attributes_vn={}))
 
         db.commit()
         return created_id
@@ -272,8 +280,8 @@ def update_item(table: str, id: int, attributes: Optional[Dict[str, Any]] = None
         if item is None:
             return False
 
-        item.attributes = attrs_data
-        item.raw = raw_data
+        item.attribute_vn = attrs_data
+        item.raw_vn = raw_data
         db.commit()
         return True
 
@@ -321,7 +329,7 @@ def migrate_subject_links_from_curricula() -> int:
     created_links = 0
 
     with get_db() as db:
-        rows = db.execute(select(Curriculum.id, Curriculum.attributes)).all()
+        rows = db.execute(select(Curriculum.id, Curriculum.attribute_vn)).all()
 
         for curricula_id, attributes_text in rows:
             curriculum_attributes = _parse_json(attributes_text)
@@ -346,10 +354,10 @@ def migrate_subject_links_from_curricula() -> int:
 
                 existing_subject = db.get(Subject, subject_id)
                 if existing_subject is None:
-                    db.add(Subject(id=subject_id, attributes=subject_attributes, raw=subject))
+                    db.add(Subject(id=subject_id, attribute_vn=subject_attributes, raw_vn=subject))
                 else:
-                    existing_subject.attributes = subject_attributes
-                    existing_subject.raw = subject
+                    existing_subject.attribute_vn = subject_attributes
+                    existing_subject.raw_vn = subject
 
                 existing_link = db.get(CurriculumSubject, (curricula_id, subject_id))
 
@@ -358,13 +366,69 @@ def migrate_subject_links_from_curricula() -> int:
                         CurriculumSubject(
                             curricula_id=curricula_id,
                             subject_id=subject_id,
-                            link_attributes=link_attributes,
+                            link_attributes_vn=link_attributes,
                         )
                     )
                     created_links += 1
                 else:
-                    existing_link.link_attributes = link_attributes
+                    existing_link.link_attributes_vn = link_attributes
 
         db.commit()
 
     return created_links
+
+
+from sqlalchemy import select
+
+def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 2) -> list[dict]:
+    """Truy vấn gợi ý tìm kiếm chỉ trong 1 bảng (mục) cụ thể"""
+    normalized_search = f"%{keyword.strip()}%"
+    suggestions = []
+
+    with get_db() as db:
+        if scope == "subjects":
+            rows = db.execute(
+                select(Subject.id, Subject.attribute_vn['name'].as_string())
+                .where(Subject.attribute_vn['name'].as_string().ilike(normalized_search))
+                .limit(limit_results)
+            ).all()
+            for item_id, name in rows:
+                suggestions.append({"name": name, "url": f"/syllabus?subject_id={item_id}"})
+                
+        elif scope == "majors":
+            rows = db.execute(
+                select(Major.id, Major.attribute_vn['name'].as_string())
+                .where(Major.attribute_vn['name'].as_string().ilike(normalized_search))
+                .limit(limit_results)
+            ).all()
+            for item_id, name in rows:
+                suggestions.append({"name": name, "url": f"/curricula?major_id={item_id}"})
+
+        elif scope == "curricula":
+            rows = db.execute(
+                select(Curriculum.id, Curriculum.attribute_vn['name'].as_string())
+                .where(Curriculum.attribute_vn['name'].as_string().ilike(normalized_search))
+                .limit(limit_results)
+            ).all()
+            for item_id, name in rows:
+                suggestions.append({"name": name, "url": f"/subjects?curricula_id={item_id}"})
+                
+        elif scope == "faculties":
+            rows = db.execute(
+                select(Faculty.id, Faculty.attribute_vn['name'].as_string())
+                .where(Faculty.attribute_vn['name'].as_string().ilike(normalized_search))
+                .limit(limit_results)
+            ).all()
+            for item_id, name in rows:
+                suggestions.append({"name": name, "url": f"/majors?faculty_id={item_id}"})
+                
+        elif scope == "schools":
+            rows = db.execute(
+                select(School.id, School.attribute_vn['name'].as_string())
+                .where(School.attribute_vn['name'].as_string().ilike(normalized_search))
+                .limit(limit_results)
+            ).all()
+            for item_id, name in rows:
+                suggestions.append({"name": name, "url": f"/faculties?school_id={item_id}"})
+
+    return suggestions

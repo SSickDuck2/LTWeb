@@ -3,12 +3,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from backend.database import check_db_connection, get_single_item, get_subject_from_curriculum, get_table_data
+from backend.database import check_db_connection, get_single_item, get_subject_from_curriculum, get_table_data, get_scoped_search_suggestions
 from backend.routes.schools import router as schools_router
 from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
@@ -43,6 +43,62 @@ def health_check():
         "db": db_state,
     }
 
+@app.get("/set-lang")
+def set_language(lang: str, next_url: str = "/"):
+    """Lưu lựa chọn ngôn ngữ vào Cookie và chuyển hướng lại trang cũ"""
+    response = RedirectResponse(url=next_url, )
+    response.set_cookie(key="lang", value=lang, max_age=31536000, path="/") # Lưu 1 năm
+    return response
+
+def _apply_language(item: dict, lang: str):
+    """Hàm áp dụng ngôn ngữ cho 1 item, nếu không có sẽ chèn câu báo lỗi"""
+    if not item: return item
+    
+    attr_vn = item.get("attributes") or {}
+    attr_en = item.get("attribute_en") or {}
+    
+    if lang == "en":
+        target = attr_en
+        msg = "(Chưa có phiên bản tiếng Anh của mục này)"
+    else:
+        target = attr_vn
+        msg = "(Chưa có phiên bản tiếng Việt của mục này)"
+        
+    if not target or not target.get("name"):
+        item["attributes"] = {
+            "name": msg,
+            "schoolCode": attr_vn.get("schoolCode", "N/A"),
+            "facultyCode": attr_vn.get("facultyCode", "N/A"),
+            "subjectCode": attr_vn.get("subjectCode", attr_vn.get("subCode", "N/A")),
+            "subCode": attr_vn.get("subCode", "N/A"),
+            "credits": attr_vn.get("credits", "0"),
+            "type": attr_vn.get("type", "N/A"),
+            "description": msg,
+            "objectives": msg,
+            "content": msg,
+            "prerequisite": msg,
+            "assessment": msg,
+            "textbook": msg,
+        }
+    else:
+        item["attributes"] = target
+    return item
+
+def _resolve_name(table: str, item_id: Optional[int], lang: str = "vi") -> str:
+    """Lấy tên theo ngôn ngữ đang chọn"""
+    if item_id is None:
+        return "Unknown"
+    item = get_single_item(table, item_id)
+    if not item:
+        return "Unknown"
+        
+    attr_vn = item.get("attributes", {})
+    attr_en = item.get("attribute_en", {})
+    
+    target = attr_en if lang == "en" else attr_vn
+    if not target or not target.get("name"):
+        return "(Chưa có bản tiếng Anh)" if lang == "en" else "(Chưa có bản tiếng Việt)"
+    return target.get("name", "Unknown")
 
 def _build_meta(payload: Dict[str, Any], page_size: int) -> Dict[str, Any]:
     resolved_page = payload.get("page", 1)
@@ -239,12 +295,22 @@ def subjects_page(
             search=search,
         )
 
+        current_page_size = 1000 if search else 20
+
+        data = get_table_data(
+            "subjects",
+            page=page,
+            page_size=current_page_size,
+            filters={"curricula_id": curricula_id},
+            search=search,
+        )
+
         return templates.TemplateResponse(
             "subjects.html",
             {
                 "request": request,
                 "subjects": data.get("data", []),
-                "meta": _build_meta(data, 20),
+                "meta": _build_meta(data, current_page_size),
                 "curricula_id": curricula_id,
                 "curriculum_name": curriculum_name,
                 "major_id": major_id_int,
@@ -304,6 +370,14 @@ def syllabus_page(
         )
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
+    
+@app.get("/api/search/suggestions")
+def search_suggestions_api(q: str = Query(..., min_length=2), scope: str = Query(...)):
+    try:
+        results = get_scoped_search_suggestions(keyword=q, scope=scope)
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
