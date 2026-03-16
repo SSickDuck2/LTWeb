@@ -2,109 +2,82 @@
 
 {% block title %}Chi Tiết Môn Học - NEU Curriculum{% endblock %}
 
-{% set major_nav_qs -%}{% if major_id is not none %}&major_id={{ major_id }}{% endif %}{% if faculty_id is not none %}&faculty_id={{ faculty_id }}{% endif %}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}{%- endset %}
-{% set faculty_nav_qs -%}{% if faculty_id is not none %}&faculty_id={{ faculty_id }}{% endif %}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}{%- endset %}
-{% set school_nav_qs -%}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}{%- endset %}
-
-{% block breadcrumb %}
+{% block main_content %}
 <div class="breadcrumb">
     <a href="/">Trang chủ</a> <span>/</span> 
-    {% if school_id is not none %}
-    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ school_name }}</span> <span>/</span>
-    {% endif %}
-    {% if faculty_id is not none %}
-    <a href="/majors?faculty_id={{ faculty_id }}{{ school_nav_qs }}">{{ faculty_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ faculty_name }}</span> <span>/</span>
-    {% endif %}
-    {% if major_id is not none %}
-    <a href="/curricula?major_id={{ major_id }}{{ faculty_nav_qs }}">{{ major_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ major_name }}</span> <span>/</span>
-    {% endif %}
-    {% if curricula_id is not none %}
-    <a href="/subjects?curricula_id={{ curricula_id }}{{ major_nav_qs }}">{{ curriculum_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ curriculum_name }}</span> <span>/</span>
-    {% endif %}
+    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span> 
+    <a href="/majors?faculty_id={{ faculty_id }}">{{ faculty_name }}</a> <span>/</span> 
+    <a href="/curricula?major_id={{ major_id }}">{{ major_name }}</a> <span>/</span> 
+    <a href="/subjects?curricula_id={{ curricula_id }}">{{ curriculum_name }}</a> <span>/</span> 
     <strong>{{ subject_name }}</strong>
 </div>
-{% endblock %}
-
-{% block content %}
-<div class="table-wrapper syllabus-wrapper">
+<div class="table-wrapper" style="padding: 30px;">
     {% if subject %}
-    <div class="syllabus-content">
-        <h2 class="syllabus-title">{{ subject.attributes.name }}</h2>
+    <div style="margin-bottom: 30px;">
+        <h2 style="color: #333; margin-bottom: 20px;">{{ subject.attributes.name }}</h2>
         
-        <div class="syllabus-metrics-grid">
-            <div class="syllabus-card">
-                <p class="syllabus-label">MÃ MÔN</p>
-                <p class="syllabus-value">{{ subject.attributes.subjectCode or subject.attributes.subCode or 'N/A' }}</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">MÃ MÔN</p>
+                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.subCode or 'N/A' }}</p>
             </div>
-            <div class="syllabus-card">
-                <p class="syllabus-label">TÍN CHỈ</p>
-                <p class="syllabus-value">{{ subject.attributes.credits or '0' }} TC</p>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">TÍN CHỈ</p>
+                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.credits or '0' }} TC</p>
             </div>
-            <div class="syllabus-card">
-                <p class="syllabus-label">KIỂU MÔN</p>
-                <p class="syllabus-value">{{ subject.attributes.type or 'Thường' }}</p>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">KIỂU MÔN</p>
+                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.type or 'Thường' }}</p>
             </div>
         </div>
 
         {% if subject.attributes.description %}
-        <div class="syllabus-card syllabus-section">
-            <h3 class="syllabus-section-title">Mô Tả</h3>
-            <p class="syllabus-paragraph">{{ subject.attributes.description }}</p>
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="color: #333; margin-bottom: 10px;">Mô Tả</h3>
+            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.description }}</p>
         </div>
         {% endif %}
 
         {% if subject.attributes.objectives %}
-        <div class="syllabus-card syllabus-section">
-            <h3 class="syllabus-section-title">Mục Tiêu Học Tập</h3>
-            <p class="syllabus-paragraph">{{ subject.attributes.objectives }}</p>
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="color: #333; margin-bottom: 10px;">Mục Tiêu Học Tập</h3>
+            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.objectives }}</p>
         </div>
         {% endif %}
 
         {% if subject.attributes.content %}
-        <div class="syllabus-card syllabus-section">
-            <h3 class="syllabus-section-title">Nội Dung</h3>
-            <p class="syllabus-paragraph">{{ subject.attributes.content }}</p>
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="color: #333; margin-bottom: 10px;">Nội Dung</h3>
+            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.content }}</p>
         </div>
         {% endif %}
 
-        <div class="syllabus-info-grid">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
             {% if subject.attributes.prerequisite %}
-            <div class="syllabus-card syllabus-info-card">
-                <p class="syllabus-label">KIẾN THỨC TIÊN QUYẾT</p>
-                <p class="syllabus-info-value">{{ subject.attributes.prerequisite }}</p>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">KIẾN THỨC TIÊN QUYẾT</p>
+                <p style="color: #333; font-weight: 500;">{{ subject.attributes.prerequisite }}</p>
             </div>
             {% endif %}
 
             {% if subject.attributes.assessment %}
-            <div class="syllabus-card syllabus-info-card">
-                <p class="syllabus-label">ĐÁNH GIÁ</p>
-                <p class="syllabus-info-value">{{ subject.attributes.assessment }}</p>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">ĐÁNH GIÁ</p>
+                <p style="color: #333; font-weight: 500;">{{ subject.attributes.assessment }}</p>
             </div>
             {% endif %}
 
             {% if subject.attributes.textbook %}
-            <div class="syllabus-card syllabus-info-card">
-                <p class="syllabus-label">GIÁO TRÌNH</p>
-                <p class="syllabus-info-value">{{ subject.attributes.textbook }}</p>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">GIÁO TRÌNH</p>
+                <p style="color: #333; font-weight: 500;">{{ subject.attributes.textbook }}</p>
             </div>
             {% endif %}
         </div>
     </div>
 
-    <div class="syllabus-back-wrap">
-        {% if curricula_id is not none %}
-        <a href="/subjects?curricula_id={{ curricula_id }}{{ major_nav_qs }}" class="syllabus-back-link">← Quay lại danh sách môn học</a>
-        {% else %}
-        <a href="/" class="syllabus-back-link">← Quay lại trang chủ</a>
-        {% endif %}
+    <div style="margin-top: 30px; text-align: center;">
+        <a href="/subjects?curricula_id={{ curricula_id }}" style="padding: 10px 30px; background: #667eea; color: white; border-radius: 4px; text-decoration: none; font-weight: 500;">← Quay lại danh sách môn học</a>
     </div>
     {% else %}
     <div class="empty-state">

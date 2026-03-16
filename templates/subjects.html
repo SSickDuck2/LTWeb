@@ -5,7 +5,7 @@
 {% set nav_qs -%}{% if major_id is not none %}&major_id={{ major_id }}{% endif %}{% if faculty_id is not none %}&faculty_id={{ faculty_id }}{% endif %}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}{%- endset %}
 {% set search_qs -%}{% if search %}&search={{ search|urlencode }}{% endif %}{%- endset %}
 
-{% block breadcrumb %}
+{% block main_content %}
 <div class="breadcrumb">
     <a href="/">Trang chủ</a> <span>/</span> 
     {% if school_id is not none %}
@@ -25,9 +25,6 @@
     {% endif %}
     <strong>{{ curriculum_name }}</strong> <span>/</span> <strong>Các Môn Học</strong>
 </div>
-{% endblock %}
-
-{% block filters %}
 <div class="filters">
     <div class="filter-group">
         <form method="GET" style="display: flex; gap: 10px; align-items: center;">
@@ -42,15 +39,16 @@
             <input type="hidden" name="school_id" value="{{ school_id }}">
             {% endif %}
             <label for="search">Tìm kiếm:</label>
-            <input type="text" id="search" name="search" placeholder="Nhập tên môn học..." value="{{ search or '' }}" style="flex: 1; max-width: 300px;">
+            <div style="position: relative; flex: 1; max-width: 300px;">
+                <input type="text" id="search" name="search" data-scope="subjects" placeholder="Nhập tên môn học..." value="{{ search or '' }}" autocomplete="off" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                <div id="search-dropdown" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 300px; overflow-y: auto; text-align: left;">
+                </div>
+            </div>
             <button type="submit">Tìm kiếm</button>
             <a href="/subjects?curricula_id={{ curricula_id }}{{ nav_qs }}" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
         </form>
     </div>
 </div>
-{% endblock %}
-
-{% block content %}
 <div class="table-wrapper">
     {% if subjects and subjects|length > 0 %}
     <table>
@@ -59,6 +57,7 @@
                 <th>Mã Môn</th>
                 <th>Tên Môn Học</th>
                 <th>Tín Chỉ</th>
+                <th>Kiểu Môn</th>
                 <th>Hành Động</th>
             </tr>
         </thead>
@@ -73,6 +72,9 @@
                 </td>
                 <td>
                     <span class="badge">{{ subject.attributes.credits or '0' }} TC</span>
+                </td>
+                <td>
+                    <span class="badge">{{ subject.attributes.type or 'Thường' }}</span>
                 </td>
                 <td>
                     <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}{{ nav_qs }}" class="row-link">Xem → </a>

@@ -131,8 +131,10 @@ class School(Base):
     __tablename__ = "schools"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
 
     faculties: Mapped[list["Faculty"]] = relationship(back_populates="school")
 
@@ -142,8 +144,10 @@ class Faculty(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     school_id: Mapped[Optional[int]] = mapped_column(ForeignKey("schools.id", ondelete="SET NULL"), index=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
 
     school: Mapped[Optional[School]] = relationship(back_populates="faculties")
     majors: Mapped[list["Major"]] = relationship(back_populates="faculty")
@@ -154,8 +158,10 @@ class Major(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     faculty_id: Mapped[Optional[int]] = mapped_column(ForeignKey("faculties.id", ondelete="SET NULL"), index=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
 
     faculty: Mapped[Optional[Faculty]] = relationship(back_populates="majors")
     curricula: Mapped[list["Curriculum"]] = relationship(back_populates="major")
@@ -166,8 +172,10 @@ class Curriculum(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_id: Mapped[Optional[int]] = mapped_column(ForeignKey("majors.id", ondelete="SET NULL"), index=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
 
     major: Mapped[Optional[Major]] = relationship(back_populates="curricula")
     subject_links: Mapped[list["CurriculumSubject"]] = relationship(back_populates="curriculum")
@@ -177,8 +185,10 @@ class Subject(Base):
     __tablename__ = "subjects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
 
     curriculum_links: Mapped[list["CurriculumSubject"]] = relationship(back_populates="subject")
 
@@ -192,7 +202,8 @@ class CurriculumSubject(Base):
 
     curricula_id: Mapped[int] = mapped_column(ForeignKey("curricula.id", ondelete="CASCADE"), primary_key=True)
     subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"), primary_key=True)
-    link_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    link_attributes_vn: Mapped[Optional[dict]] = mapped_column(JSON)
+    link_attributes_en: Mapped[Optional[dict]] = mapped_column(JSON)
 
     curriculum: Mapped[Curriculum] = relationship(back_populates="subject_links")
     subject: Mapped[Subject] = relationship(back_populates="curriculum_links")

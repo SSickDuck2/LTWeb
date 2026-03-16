@@ -2,28 +2,24 @@
 
 {% block title %}Các Trường - NEU Curriculum{% endblock %}
 
-{% set search_qs -%}{% if search %}&search={{ search|urlencode }}{% endif %}{%- endset %}
-
-{% block breadcrumb %}
+{% block main_content %}
 <div class="breadcrumb">
     <strong>Trang chủ</strong> <span>/</span> <strong>Các Trường</strong>
 </div>
-{% endblock %}
-
-{% block filters %}
 <div class="filters">
     <div class="filter-group">
         <form method="GET" style="display: flex; gap: 10px; align-items: center;">
             <label for="search">Tìm kiếm:</label>
-            <input type="text" id="search" name="search" placeholder="Nhập tên trường..." value="{{ search or '' }}" style="flex: 1; max-width: 300px;">
+            <div style="position: relative; flex: 1; max-width: 300px;">
+                <input type="text" id="search" name="search" data-scope="schools" placeholder="Nhập tên trường..." value="{{ search or '' }}" autocomplete="off" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                <div id="search-dropdown" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 300px; overflow-y: auto; text-align: left;">
+                </div>
+            </div>
             <button type="submit">Tìm kiếm</button>
             <a href="/" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
         </form>
     </div>
 </div>
-{% endblock %}
-
-{% block content %}
 <div class="table-wrapper">
     {% if schools and schools|length > 0 %}
     <table>
@@ -31,7 +27,6 @@
             <tr>
                 <th>Mã Trường</th>
                 <th>Tên Trường</th>
-                <th>Mô Tả</th>
                 <th>Hành Động</th>
             </tr>
         </thead>
@@ -45,9 +40,6 @@
                     </a>
                 </td>
                 <td>
-                    <span class="description">{{ school.attributes.description[:100] if school.attributes.description else 'Không có mô tả' }}</span>
-                </td>
-                <td>
                     <a href="/faculties?school_id={{ school.id }}" class="row-link">Xem → </a>
                 </td>
             </tr>
@@ -57,16 +49,16 @@
 
     {% if meta.total > meta.pageSize %}
     <div class="pagination">
-        {% if meta.hasPrev %}
-        <a href="/?page=1{{ search_qs }}" class="page-link">« Trang đầu</a>
-        <a href="/?page={{ meta.page - 1 }}{{ search_qs }}" class="page-link">‹ Trước</a>
+        {% if meta.page > 1 %}
+        <a href="/?page=1" class="page-link">« Trang đầu</a>
+        <a href="/?page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
         {% endif %}
 
-        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ meta.totalPages }}</strong></span>
+        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ (meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0) }}</strong></span>
 
-        {% if meta.hasNext %}
-        <a href="/?page={{ meta.page + 1 }}{{ search_qs }}" class="page-link">Sau ›</a>
-        <a href="/?page={{ meta.totalPages }}{{ search_qs }}" class="page-link">Trang cuối »</a>
+        {% if meta.page < ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) %}
+        <a href="/?page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
+        <a href="/?page={{ ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) }}" class="page-link">Trang cuối »</a>
         {% endif %}
     </div>
     {% endif %}
