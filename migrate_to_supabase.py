@@ -177,7 +177,8 @@ def ensure_schema(cursor: psycopg.Cursor) -> None:
         CREATE TABLE IF NOT EXISTS curriculum_subjects (
             curricula_id BIGINT REFERENCES curricula(id) ON DELETE CASCADE,
             subject_id BIGINT REFERENCES subjects(id) ON DELETE CASCADE,
-            link_attributes JSONB,
+            link_attributes_vn JSONB,
+            link_attributes_en JSONB,
             PRIMARY KEY (curricula_id, subject_id)
         );
 
@@ -379,10 +380,10 @@ def migrate(sqlite_db_path: str, supabase_db_url: str, truncate: bool) -> None:
                     cursor,
                     link_payload,
                     """
-                    INSERT INTO curriculum_subjects (curricula_id, subject_id, link_attributes)
+                    INSERT INTO curriculum_subjects (curricula_id, subject_id, link_attributes_vn)
                     VALUES (%s, %s, %s)
                     ON CONFLICT (curricula_id, subject_id) DO UPDATE
-                    SET link_attributes = EXCLUDED.link_attributes;
+                    SET link_attributes_vn = EXCLUDED.link_attributes_vn;
                     """,
                 )
 
