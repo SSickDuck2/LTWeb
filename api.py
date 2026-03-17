@@ -46,9 +46,19 @@ def health_check():
 @app.get("/set-lang")
 def set_language(lang: str, next_url: str = "/"):
     """Lưu lựa chọn ngôn ngữ vào Cookie và chuyển hướng lại trang cũ"""
-    response = RedirectResponse(url=next_url, )
-    response.set_cookie(key="lang", value=lang, max_age=31536000, path="/") # Lưu 1 năm
+    safe_lang = (lang or "vi").lower()
+    if safe_lang not in {"vi", "en"}:
+        safe_lang = "vi"
+
+    safe_next_url = next_url if next_url.startswith("/") else "/"
+    response = RedirectResponse(url=safe_next_url)
+    response.set_cookie(key="lang", value=safe_lang, max_age=31536000, path="/") # Lưu 1 năm
     return response
+
+
+def _get_lang_from_request(request: Request) -> str:
+    lang = (request.cookies.get("lang") or "vi").lower()
+    return lang if lang in {"vi", "en"} else "vi"
 
 def _apply_language(item: dict, lang: str):
     """Hàm áp dụng ngôn ngữ cho 1 item, nếu không có sẽ chèn câu báo lỗi"""
@@ -116,15 +126,6 @@ def _build_meta(payload: Dict[str, Any], page_size: int) -> Dict[str, Any]:
     }
 
 
-def _resolve_name(table: str, item_id: Optional[int]) -> str:
-    if item_id is None:
-        return "Unknown"
-    item = get_single_item(table, item_id)
-    if not item:
-        return "Unknown"
-    return item.get("attributes", {}).get("name", "Unknown")
-
-
 def _parse_optional_id(value: Optional[str]) -> Optional[int]:
     # Keep old bookmarked URLs like "school_id=None" from breaking request validation.
     if value in (None, "", "None", "null"):
@@ -139,15 +140,18 @@ def _parse_optional_id(value: Optional[str]) -> Optional[int]:
 def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Query(None)):
     """Home page - list of schools"""
     try:
+        lang = _get_lang_from_request(request)
         data = get_table_data("schools", page=page, page_size=10, search=search)
+        schools = [_apply_language(item, lang) for item in data.get("data", [])]
 
         return templates.TemplateResponse(
             "schools.html",
             {
                 "request": request,
-                "schools": data.get("data", []),
+                "schools": schools,
                 "meta": _build_meta(data, 10),
                 "search": search,
+                "lang": lang,
             },
         )
     except Exception as e:
@@ -163,7 +167,8 @@ def faculties_page(
 ):
     """Faculties page"""
     try:
-        school_name = _resolve_name("schools", school_id)
+        lang = _get_lang_from_request(request)
+        school_name = _resolve_name("schools", school_id, lang)
         data = get_table_data(
             "faculties",
             page=page,
@@ -171,16 +176,18 @@ def faculties_page(
             filters={"school_id": school_id},
             search=search,
         )
+        faculties = [_apply_language(item, lang) for item in data.get("data", [])]
 
         return templates.TemplateResponse(
             "faculties.html",
             {
                 "request": request,
-                "faculties": data.get("data", []),
+                "faculties": faculties,
                 "meta": _build_meta(data, 10),
                 "school_id": school_id,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
             },
         )
     except Exception as e:
@@ -197,9 +204,10 @@ def majors_page(
 ):
     """Majors page"""
     try:
+        lang = _get_lang_from_request(request)
         school_id_int = _parse_optional_id(school_id)
-        faculty_name = _resolve_name("faculties", faculty_id)
-        school_name = _resolve_name("schools", school_id_int)
+        faculty_name = _resolve_name("faculties", faculty_id, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
         data = get_table_data(
             "majors",
             page=page,
@@ -207,18 +215,20 @@ def majors_page(
             filters={"faculty_id": faculty_id},
             search=search,
         )
+        majors = [_apply_language(item, lang) for item in data.get("data", [])]
 
         return templates.TemplateResponse(
             "majors.html",
             {
                 "request": request,
-                "majors": data.get("data", []),
+                "majors": majors,
                 "meta": _build_meta(data, 10),
                 "faculty_id": faculty_id,
                 "faculty_name": faculty_name,
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
             },
         )
     except Exception as e:
@@ -236,11 +246,12 @@ def curricula_page(
 ):
     """Curricula page"""
     try:
+        lang = _get_lang_from_request(request)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
-        major_name = _resolve_name("majors", major_id)
-        faculty_name = _resolve_name("faculties", faculty_id_int)
-        school_name = _resolve_name("schools", school_id_int)
+        major_name = _resolve_name("majors", major_id, lang)
+        faculty_name = _resolve_name("faculties", faculty_id_int, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
         data = get_table_data(
             "curricula",
             page=page,
@@ -248,12 +259,13 @@ def curricula_page(
             filters={"major_id": major_id},
             search=search,
         )
+        curricula = [_apply_language(item, lang) for item in data.get("data", [])]
 
         return templates.TemplateResponse(
             "curricula.html",
             {
                 "request": request,
-                "curricula": data.get("data", []),
+                "curricula": curricula,
                 "meta": _build_meta(data, 10),
                 "major_id": major_id,
                 "major_name": major_name,
@@ -262,6 +274,7 @@ def curricula_page(
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
             },
         )
     except Exception as e:
@@ -280,20 +293,14 @@ def subjects_page(
 ):
     """Subjects page"""
     try:
+        lang = _get_lang_from_request(request)
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
-        curriculum_name = _resolve_name("curricula", curricula_id)
-        major_name = _resolve_name("majors", major_id_int)
-        faculty_name = _resolve_name("faculties", faculty_id_int)
-        school_name = _resolve_name("schools", school_id_int)
-        data = get_table_data(
-            "subjects",
-            page=page,
-            page_size=20,
-            filters={"curricula_id": curricula_id},
-            search=search,
-        )
+        curriculum_name = _resolve_name("curricula", curricula_id, lang)
+        major_name = _resolve_name("majors", major_id_int, lang)
+        faculty_name = _resolve_name("faculties", faculty_id_int, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
 
         current_page_size = 1000 if search else 20
 
@@ -304,12 +311,13 @@ def subjects_page(
             filters={"curricula_id": curricula_id},
             search=search,
         )
+        subjects = [_apply_language(item, lang) for item in data.get("data", [])]
 
         return templates.TemplateResponse(
             "subjects.html",
             {
                 "request": request,
-                "subjects": data.get("data", []),
+                "subjects": subjects,
                 "meta": _build_meta(data, current_page_size),
                 "curricula_id": curricula_id,
                 "curriculum_name": curriculum_name,
@@ -320,6 +328,7 @@ def subjects_page(
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
             },
         )
     except Exception as e:
@@ -337,6 +346,7 @@ def syllabus_page(
 ):
     """Subject details/syllabus page"""
     try:
+        lang = _get_lang_from_request(request)
         curricula_id_int = _parse_optional_id(curricula_id)
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
@@ -346,11 +356,13 @@ def syllabus_page(
             subject = get_subject_from_curriculum(curricula_id_int, subject_id)
         if not subject:
             subject = get_single_item("subjects", subject_id)
+        if subject:
+            subject = _apply_language(subject, lang)
         subject_name = subject.get("attributes", {}).get("name", "Unknown") if subject else "Unknown"
-        curriculum_name = _resolve_name("curricula", curricula_id_int)
-        major_name = _resolve_name("majors", major_id_int)
-        faculty_name = _resolve_name("faculties", faculty_id_int)
-        school_name = _resolve_name("schools", school_id_int)
+        curriculum_name = _resolve_name("curricula", curricula_id_int, lang)
+        major_name = _resolve_name("majors", major_id_int, lang)
+        faculty_name = _resolve_name("faculties", faculty_id_int, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
 
         return templates.TemplateResponse(
             "syllabus.html",
@@ -366,6 +378,7 @@ def syllabus_page(
                 "faculty_name": faculty_name,
                 "school_id": school_id_int,
                 "school_name": school_name,
+                "lang": lang,
             },
         )
     except Exception as e:
