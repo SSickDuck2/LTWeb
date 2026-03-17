@@ -1,87 +1,603 @@
 {% extends "base.html" %}
 
-{% block title %}Chi Tiết Môn Học - NEU Curriculum{% endblock %}
+{% block title %}{% if lang == 'en' %}Syllabus Details - NEU Curriculum{% else %}Chi Tiết Đề Cương - NEU Curriculum{% endif %}{% endblock %}
+
+{% set attr = subject.attributes if subject else {} %}
+{% set course_code = attr.subjectCode or attr.subCode or 'N/A' %}
+{% set credits = attr.credits or '0' %}
+{% set course_type = attr.type or ('Regular' if lang == 'en' else 'Thường') %}
+{% set description = attr.description or ('No description available' if lang == 'en' else 'Chưa có mô tả') %}
+{% set objectives = attr.objectives or ('No learning objectives available' if lang == 'en' else 'Chưa có mục tiêu học tập') %}
+{% set content = attr.content or ('No course content available' if lang == 'en' else 'Chưa có nội dung học phần') %}
+{% set prerequisite = attr.prerequisite or ('No prerequisite information' if lang == 'en' else 'Chưa có thông tin tiên quyết') %}
+{% set assessment = attr.assessment or ('No assessment information' if lang == 'en' else 'Chưa có thông tin đánh giá') %}
+{% set textbook = attr.textbook or ('No textbook information' if lang == 'en' else 'Chưa có thông tin giáo trình') %}
+
+{% block extra_css %}
+.syllabus-page {
+    padding: 28px;
+}
+
+.syllabus-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.syllabus-top h2 {
+    color: #2f2f2f;
+    margin-bottom: 6px;
+}
+
+.syllabus-top p {
+    color: #666;
+    font-size: 14px;
+}
+
+.syllabus-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.btn-soft {
+    border: 1px solid #d5d9e3;
+    background: #ffffff;
+    color: #3d4256;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-soft:hover {
+    background: #f5f7fb;
+}
+
+.btn-primary {
+    border: none;
+    background: #667eea;
+    color: #fff;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    background: #576dd1;
+}
+
+.syllabus-plain {
+    border: 1px solid #e9edf5;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.syllabus-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid #edf1f7;
+}
+
+.syllabus-item:last-child {
+    border-bottom: none;
+}
+
+.syllabus-item-label {
+    font-size: 12px;
+    color: #7f879b;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.syllabus-item-value {
+    color: #34384a;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.syllabus-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 24, 39, 0.48);
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.syllabus-modal.hidden {
+    display: none;
+}
+
+.syllabus-modal-panel {
+    width: min(920px, 96vw);
+    max-height: 90vh;
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+}
+
+.syllabus-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #e8ecf4;
+}
+
+.syllabus-modal-header h3 {
+    font-size: 18px;
+    color: #2f3447;
+}
+
+.syllabus-modal-body {
+    padding: 16px 18px;
+    overflow-y: auto;
+    max-height: 64vh;
+    background: #fafbff;
+}
+
+.edit-field {
+    background: #fff;
+    border: 1px solid #dde3f0;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.edit-field label {
+    display: block;
+    font-size: 12px;
+    color: #5f677d;
+    margin-bottom: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.edit-field textarea {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
+    border: 1px solid #cfd7e8;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #2f3447;
+}
+
+.edit-field textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.16);
+}
+
+.syllabus-modal-footer {
+    padding: 14px 18px;
+    border-top: 1px solid #e8ecf4;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.syllabus-footer-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.draft-note {
+    color: #606981;
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+@media (max-width: 760px) {
+    .syllabus-page {
+        padding: 18px;
+    }
+
+    .syllabus-top {
+        flex-direction: column;
+    }
+
+    .syllabus-actions {
+        width: 100%;
+    }
+
+    .syllabus-actions button,
+    .syllabus-actions a {
+        flex: 1;
+        text-align: center;
+    }
+}
+{% endblock %}
 
 {% block main_content %}
 <div class="breadcrumb">
-    <a href="/">Trang chủ</a> <span>/</span> 
-    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span> 
-    <a href="/majors?faculty_id={{ faculty_id }}">{{ faculty_name }}</a> <span>/</span> 
-    <a href="/curricula?major_id={{ major_id }}">{{ major_name }}</a> <span>/</span> 
-    <a href="/subjects?curricula_id={{ curricula_id }}">{{ curriculum_name }}</a> <span>/</span> 
+    <a href="/">{% if lang == 'en' %}Home{% else %}Trang chủ{% endif %}</a> <span>/</span>
+    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span>
+    <a href="/majors?faculty_id={{ faculty_id }}&school_id={{ school_id }}">{{ faculty_name }}</a> <span>/</span>
+    <a href="/curricula?major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}">{{ major_name }}</a> <span>/</span>
+    <a href="/subjects?curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}">{{ curriculum_name }}</a> <span>/</span>
     <strong>{{ subject_name }}</strong>
 </div>
-<div class="table-wrapper" style="padding: 30px;">
+
+<div class="table-wrapper syllabus-page">
     {% if subject %}
-    <div style="margin-bottom: 30px;">
-        <h2 style="color: #333; margin-bottom: 20px;">{{ subject.attributes.name }}</h2>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">MÃ MÔN</p>
-                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.subCode or 'N/A' }}</p>
-            </div>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">TÍN CHỈ</p>
-                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.credits or '0' }} TC</p>
-            </div>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">KIỂU MÔN</p>
-                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.type or 'Thường' }}</p>
-            </div>
+    <div class="syllabus-top">
+        <div>
+            <h2>{{ subject.attributes.name }}</h2>
+            <p>
+                {% if lang == 'en' %}
+                Plain text syllabus view with 9 sections. Click "View details" to open editable detail box.
+                {% else %}
+                Bản đề cương thuần chữ gồm 9 mục. Bấm "Xem chi tiết" để mở box chi tiết có thể chỉnh sửa.
+                {% endif %}
+            </p>
         </div>
-
-        {% if subject.attributes.description %}
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="color: #333; margin-bottom: 10px;">Mô Tả</h3>
-            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.description }}</p>
-        </div>
-        {% endif %}
-
-        {% if subject.attributes.objectives %}
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="color: #333; margin-bottom: 10px;">Mục Tiêu Học Tập</h3>
-            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.objectives }}</p>
-        </div>
-        {% endif %}
-
-        {% if subject.attributes.content %}
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="color: #333; margin-bottom: 10px;">Nội Dung</h3>
-            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.content }}</p>
-        </div>
-        {% endif %}
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-            {% if subject.attributes.prerequisite %}
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">KIẾN THỨC TIÊN QUYẾT</p>
-                <p style="color: #333; font-weight: 500;">{{ subject.attributes.prerequisite }}</p>
-            </div>
-            {% endif %}
-
-            {% if subject.attributes.assessment %}
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">ĐÁNH GIÁ</p>
-                <p style="color: #333; font-weight: 500;">{{ subject.attributes.assessment }}</p>
-            </div>
-            {% endif %}
-
-            {% if subject.attributes.textbook %}
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">GIÁO TRÌNH</p>
-                <p style="color: #333; font-weight: 500;">{{ subject.attributes.textbook }}</p>
-            </div>
-            {% endif %}
+        <div class="syllabus-actions">
+            <button type="button" id="open-detail-modal" class="btn-primary">
+                {% if lang == 'en' %}View Details{% else %}Xem Chi Tiết{% endif %}
+            </button>
+            <button type="button" id="print-syllabus" class="btn-soft">
+                {% if lang == 'en' %}Print Syllabus{% else %}In Đề Cương{% endif %}
+            </button>
         </div>
     </div>
 
-    <div style="margin-top: 30px; text-align: center;">
-        <a href="/subjects?curricula_id={{ curricula_id }}" style="padding: 10px 30px; background: #667eea; color: white; border-radius: 4px; text-decoration: none; font-weight: 500;">← Quay lại danh sách môn học</a>
+    <div class="syllabus-plain" id="syllabus-plain-view">
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Course Code{% else %}Mã Môn{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="subCode">{{ course_code }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Credits{% else %}Tín Chỉ{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="credits">{{ credits }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Course Type{% else %}Kiểu Môn{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="type">{{ course_type }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Description{% else %}Mô Tả{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="description">{{ description }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Learning Objectives{% else %}Mục Tiêu Học Tập{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="objectives">{{ objectives }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Course Content{% else %}Nội Dung{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="content">{{ content }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Prerequisite{% else %}Kiến Thức Tiên Quyết{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="prerequisite">{{ prerequisite }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Assessment{% else %}Đánh Giá{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="assessment">{{ assessment }}</div>
+        </div>
+        <div class="syllabus-item">
+            <div class="syllabus-item-label">{% if lang == 'en' %}Textbook{% else %}Giáo Trình{% endif %}</div>
+            <div class="syllabus-item-value" data-preview-field="textbook">{{ textbook }}</div>
+        </div>
     </div>
+
+    <p class="draft-note">
+        {% if lang == 'en' %}
+        Edited content is temporarily stored in your browser for this subject.
+        {% else %}
+        Nội dung chỉnh sửa được lưu tạm trên trình duyệt theo từng môn học.
+        {% endif %}
+    </p>
+
+    <div style="margin-top: 26px; text-align: center;">
+        <a href="/subjects?curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="btn-primary" style="text-decoration: none; display: inline-block;">
+            {% if lang == 'en' %}← Back to Subjects{% else %}← Quay lại danh sách môn học{% endif %}
+        </a>
+    </div>
+
+    <div id="syllabus-modal" class="syllabus-modal hidden" aria-hidden="true">
+        <div class="syllabus-modal-panel" role="dialog" aria-modal="true" aria-labelledby="syllabus-modal-title">
+            <div class="syllabus-modal-header">
+                <h3 id="syllabus-modal-title">
+                    {% if lang == 'en' %}Detailed Syllabus{% else %}Chi Tiết Đề Cương{% endif %}
+                </h3>
+                <button type="button" id="close-detail-modal-top" class="btn-soft">
+                    {% if lang == 'en' %}Close{% else %}Đóng{% endif %}
+                </button>
+            </div>
+            <div class="syllabus-modal-body">
+                <div class="edit-field">
+                    <label for="field-subCode">{% if lang == 'en' %}Course Code{% else %}Mã Môn{% endif %}</label>
+                    <textarea id="field-subCode" data-edit-field="subCode"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-credits">{% if lang == 'en' %}Credits{% else %}Tín Chỉ{% endif %}</label>
+                    <textarea id="field-credits" data-edit-field="credits"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-type">{% if lang == 'en' %}Course Type{% else %}Kiểu Môn{% endif %}</label>
+                    <textarea id="field-type" data-edit-field="type"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-description">{% if lang == 'en' %}Description{% else %}Mô Tả{% endif %}</label>
+                    <textarea id="field-description" data-edit-field="description"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-objectives">{% if lang == 'en' %}Learning Objectives{% else %}Mục Tiêu Học Tập{% endif %}</label>
+                    <textarea id="field-objectives" data-edit-field="objectives"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-content">{% if lang == 'en' %}Course Content{% else %}Nội Dung{% endif %}</label>
+                    <textarea id="field-content" data-edit-field="content"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-prerequisite">{% if lang == 'en' %}Prerequisite{% else %}Kiến Thức Tiên Quyết{% endif %}</label>
+                    <textarea id="field-prerequisite" data-edit-field="prerequisite"></textarea>
+                </div>
+                <div class="edit-field">
+                    <label for="field-assessment">{% if lang == 'en' %}Assessment{% else %}Đánh Giá{% endif %}</label>
+                    <textarea id="field-assessment" data-edit-field="assessment"></textarea>
+                </div>
+                <div class="edit-field" style="margin-bottom: 0;">
+                    <label for="field-textbook">{% if lang == 'en' %}Textbook{% else %}Giáo Trình{% endif %}</label>
+                    <textarea id="field-textbook" data-edit-field="textbook"></textarea>
+                </div>
+            </div>
+            <div class="syllabus-modal-footer">
+                <div class="syllabus-footer-group">
+                    <button type="button" id="save-draft" class="btn-primary">{% if lang == 'en' %}Save Draft{% else %}Lưu Tạm{% endif %}</button>
+                    <button type="button" id="reset-draft" class="btn-soft">{% if lang == 'en' %}Reset{% else %}Khôi Phục{% endif %}</button>
+                </div>
+                <div class="syllabus-footer-group">
+                    <button type="button" id="print-from-modal" class="btn-soft">{% if lang == 'en' %}Print{% else %}In{% endif %}</button>
+                    <button type="button" id="close-detail-modal" class="btn-soft">{% if lang == 'en' %}Close{% else %}Đóng{% endif %}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script id="syllabus-client-config" type="application/json">
+        {{ {
+            "labels": {
+                "subCode": "Course Code" if lang == "en" else "Mã Môn",
+                "credits": "Credits" if lang == "en" else "Tín Chỉ",
+                "type": "Course Type" if lang == "en" else "Kiểu Môn",
+                "description": "Description" if lang == "en" else "Mô Tả",
+                "objectives": "Learning Objectives" if lang == "en" else "Mục Tiêu Học Tập",
+                "content": "Course Content" if lang == "en" else "Nội Dung",
+                "prerequisite": "Prerequisite" if lang == "en" else "Kiến Thức Tiên Quyết",
+                "assessment": "Assessment" if lang == "en" else "Đánh Giá",
+                "textbook": "Textbook" if lang == "en" else "Giáo Trình"
+            },
+            "initialSyllabusData": {
+                "subCode": course_code,
+                "credits": credits,
+                "type": course_type,
+                "description": description,
+                "objectives": objectives,
+                "content": content,
+                "prerequisite": prerequisite,
+                "assessment": assessment,
+                "textbook": textbook
+            },
+            "subjectName": subject.attributes.name,
+            "printSubtitle": "Syllabus Details" if lang == "en" else "Chi tiết đề cương môn học"
+        } | tojson }}
+    </script>
+
+    <script>
+        (function () {
+            const modal = document.getElementById('syllabus-modal');
+            const openModalBtn = document.getElementById('open-detail-modal');
+            const closeTopBtn = document.getElementById('close-detail-modal-top');
+            const closeBtn = document.getElementById('close-detail-modal');
+            const saveDraftBtn = document.getElementById('save-draft');
+            const resetDraftBtn = document.getElementById('reset-draft');
+            const printBtn = document.getElementById('print-syllabus');
+            const printFromModalBtn = document.getElementById('print-from-modal');
+            const editFields = Array.from(document.querySelectorAll('[data-edit-field]'));
+            const previewFields = Array.from(document.querySelectorAll('[data-preview-field]'));
+
+            if (!modal || !openModalBtn || editFields.length === 0) {
+                return;
+            }
+
+            const configNode = document.getElementById('syllabus-client-config');
+            let config = {};
+            if (configNode) {
+                try {
+                    config = JSON.parse(configNode.textContent || '{}');
+                } catch (error) {
+                    config = {};
+                }
+            }
+
+            const labels = config.labels || {};
+            const initialSyllabusData = config.initialSyllabusData || {};
+            const subjectNameForPrint = config.subjectName || '';
+            const printSubtitle = config.printSubtitle || '';
+
+            const localStorageKey = 'syllabus-draft-{{ subject.id }}';
+
+            function sanitizeValue(value) {
+                return (value ?? '').toString().trim();
+            }
+
+            function collectFromEditor() {
+                const data = {};
+                editFields.forEach((field) => {
+                    data[field.dataset.editField] = sanitizeValue(field.value);
+                });
+                return data;
+            }
+
+            function applyToEditor(data) {
+                editFields.forEach((field) => {
+                    const key = field.dataset.editField;
+                    field.value = data[key] ?? '';
+                });
+            }
+
+            function applyToPreview(data) {
+                previewFields.forEach((field) => {
+                    const key = field.dataset.previewField;
+                    field.textContent = data[key] ?? '';
+                });
+            }
+
+            function openModal() {
+                modal.classList.remove('hidden');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.style.overflow = '';
+            }
+
+            function saveDraft() {
+                const data = collectFromEditor();
+                localStorage.setItem(localStorageKey, JSON.stringify(data));
+                applyToPreview(data);
+            }
+
+            function loadDraft() {
+                const raw = localStorage.getItem(localStorageKey);
+                if (!raw) {
+                    return { ...initialSyllabusData };
+                }
+                try {
+                    const parsed = JSON.parse(raw);
+                    return { ...initialSyllabusData, ...parsed };
+                } catch (error) {
+                    return { ...initialSyllabusData };
+                }
+            }
+
+            function resetDraft() {
+                localStorage.removeItem(localStorageKey);
+                applyToEditor(initialSyllabusData);
+                applyToPreview(initialSyllabusData);
+            }
+
+            function escapeHtml(input) {
+                return (input || '').replace(/[&<>'"]/g, (char) => {
+                    const map = {
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        "'": '&#39;',
+                        '"': '&quot;'
+                    };
+                    return map[char] || char;
+                });
+            }
+
+            function printSyllabus(data) {
+                const sections = [
+                    'subCode', 'credits', 'type', 'description', 'objectives',
+                    'content', 'prerequisite', 'assessment', 'textbook'
+                ];
+
+                const sectionHtml = sections.map((key) => {
+                    const label = escapeHtml(labels[key] || key);
+                    const value = escapeHtml(data[key] || '').replace(/\n/g, '<br>');
+                    return `
+                        <div class="print-item">
+                            <div class="print-label">${label}</div>
+                            <div class="print-value">${value}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                const printWindow = window.open('', '_blank', 'width=1000,height=800');
+                if (!printWindow) {
+                    return;
+                }
+
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>${escapeHtml(subjectNameForPrint)}</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; color: #1f2230; padding: 24px; }
+                            h1 { margin: 0 0 8px; font-size: 24px; }
+                            p { margin: 0 0 20px; color: #5d6378; }
+                            .print-item { border: 1px solid #dfe5f2; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+                            .print-label { background: #f3f6fc; padding: 10px 12px; font-size: 12px; color: #4e566f; font-weight: 700; text-transform: uppercase; }
+                            .print-value { padding: 12px; line-height: 1.6; white-space: normal; }
+                            @media print { body { padding: 0; } }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>${escapeHtml(subjectNameForPrint)}</h1>
+                        <p>${escapeHtml(printSubtitle)}</p>
+                        ${sectionHtml}
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+                printWindow.focus();
+                setTimeout(() => {
+                    printWindow.print();
+                    printWindow.close();
+                }, 200);
+            }
+
+            const startData = loadDraft();
+            applyToEditor(startData);
+            applyToPreview(startData);
+
+            openModalBtn.addEventListener('click', openModal);
+            closeTopBtn.addEventListener('click', closeModal);
+            closeBtn.addEventListener('click', closeModal);
+
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+
+            saveDraftBtn.addEventListener('click', saveDraft);
+            resetDraftBtn.addEventListener('click', resetDraft);
+
+            printBtn.addEventListener('click', () => {
+                const liveData = collectFromEditor();
+                printSyllabus(liveData);
+            });
+
+            printFromModalBtn.addEventListener('click', () => {
+                const liveData = collectFromEditor();
+                printSyllabus(liveData);
+            });
+        })();
+    </script>
     {% else %}
     <div class="empty-state">
-        <p>Không tìm thấy thông tin môn học</p>
+        <p>{% if lang == 'en' %}No syllabus information found{% else %}Không tìm thấy thông tin đề cương{% endif %}</p>
     </div>
     {% endif %}
 </div>
