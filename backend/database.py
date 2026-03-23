@@ -380,7 +380,7 @@ def migrate_subject_links_from_curricula() -> int:
 
 from sqlalchemy import select
 
-def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 2) -> list[dict]:
+def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 6) -> list[dict]:
     """Truy vấn gợi ý tìm kiếm chỉ trong 1 bảng (mục) cụ thể"""
     normalized_search = f"%{keyword.strip()}%"
     suggestions = []
