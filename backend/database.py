@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from pyexpat import model
 from typing import Any, Dict, Generator, List, Optional, Set, Type
 
-from sqlalchemy import Text, cast, delete, func, select, table, text
+from sqlalchemy import Text, cast, delete, func, select, table, text, or_
 from sqlalchemy.orm import Session
 
 from backend.orm import (
@@ -380,54 +380,85 @@ def migrate_subject_links_from_curricula() -> int:
 
 from sqlalchemy import select
 
-def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 2) -> list[dict]:
-    """Truy vấn gợi ý tìm kiếm chỉ trong 1 bảng (mục) cụ thể"""
+def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 2, parent_filters: dict = None) -> list[dict]:
+    """Truy vấn gợi ý tìm kiếm có lọc theo trang hiện tại (Hỗ trợ tìm kiếm song ngữ)"""
     normalized_search = f"%{keyword.strip()}%"
     suggestions = []
+    if parent_filters is None:
+        parent_filters = {}
 
     with get_db() as db:
         if scope == "subjects":
-            rows = db.execute(
-                select(Subject.id, Subject.attribute_vn['name'].as_string())
-                .where(Subject.attribute_vn['name'].as_string().ilike(normalized_search))
-                .limit(limit_results)
-            ).all()
+            query = select(Subject.id, Subject.attribute_vn['name'].as_string())
+            if parent_filters.get("curricula_id"):
+                query = query.join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
+                query = query.where(CurriculumSubject.curricula_id == int(parent_filters["curricula_id"]))
+            
+            # ĐÃ SỬA: Tìm kiếm trên cả 2 cột tiếng Việt VÀ tiếng Anh
+            query = query.where(
+                or_(
+                    Subject.attribute_vn['name'].as_string().ilike(normalized_search),
+                    Subject.attribute_en['name'].as_string().ilike(normalized_search)
+                )
+            ).limit(limit_results)
+            rows = db.execute(query).all()
             for item_id, name in rows:
-                suggestions.append({"name": name, "url": f"/syllabus?subject_id={item_id}"})
+                suggestions.append({"name": name, "url": f"/syllabus?subject_id={item_id}&curricula_id={parent_filters.get('curricula_id', '')}"})
                 
         elif scope == "majors":
-            rows = db.execute(
-                select(Major.id, Major.attribute_vn['name'].as_string())
-                .where(Major.attribute_vn['name'].as_string().ilike(normalized_search))
-                .limit(limit_results)
-            ).all()
+            query = select(Major.id, Major.attribute_vn['name'].as_string())
+            if parent_filters.get("faculty_id"):
+                query = query.where(Major.faculty_id == int(parent_filters["faculty_id"]))
+                
+            query = query.where(
+                or_(
+                    Major.attribute_vn['name'].as_string().ilike(normalized_search),
+                    Major.attribute_en['name'].as_string().ilike(normalized_search)
+                )
+            ).limit(limit_results)
+            rows = db.execute(query).all()
             for item_id, name in rows:
                 suggestions.append({"name": name, "url": f"/curricula?major_id={item_id}"})
 
         elif scope == "curricula":
-            rows = db.execute(
-                select(Curriculum.id, Curriculum.attribute_vn['name'].as_string())
-                .where(Curriculum.attribute_vn['name'].as_string().ilike(normalized_search))
-                .limit(limit_results)
-            ).all()
+            query = select(Curriculum.id, Curriculum.attribute_vn['name'].as_string())
+            if parent_filters.get("major_id"):
+                query = query.where(Curriculum.major_id == int(parent_filters["major_id"]))
+                
+            query = query.where(
+                or_(
+                    Curriculum.attribute_vn['name'].as_string().ilike(normalized_search),
+                    Curriculum.attribute_en['name'].as_string().ilike(normalized_search)
+                )
+            ).limit(limit_results)
+            rows = db.execute(query).all()
             for item_id, name in rows:
                 suggestions.append({"name": name, "url": f"/subjects?curricula_id={item_id}"})
                 
         elif scope == "faculties":
-            rows = db.execute(
-                select(Faculty.id, Faculty.attribute_vn['name'].as_string())
-                .where(Faculty.attribute_vn['name'].as_string().ilike(normalized_search))
-                .limit(limit_results)
-            ).all()
+            query = select(Faculty.id, Faculty.attribute_vn['name'].as_string())
+            if parent_filters.get("school_id"):
+                query = query.where(Faculty.school_id == int(parent_filters["school_id"]))
+                
+            query = query.where(
+                or_(
+                    Faculty.attribute_vn['name'].as_string().ilike(normalized_search),
+                    Faculty.attribute_en['name'].as_string().ilike(normalized_search)
+                )
+            ).limit(limit_results)
+            rows = db.execute(query).all()
             for item_id, name in rows:
                 suggestions.append({"name": name, "url": f"/majors?faculty_id={item_id}"})
                 
         elif scope == "schools":
-            rows = db.execute(
-                select(School.id, School.attribute_vn['name'].as_string())
-                .where(School.attribute_vn['name'].as_string().ilike(normalized_search))
-                .limit(limit_results)
-            ).all()
+            query = select(School.id, School.attribute_vn['name'].as_string())
+            query = query.where(
+                or_(
+                    School.attribute_vn['name'].as_string().ilike(normalized_search),
+                    School.attribute_en['name'].as_string().ilike(normalized_search)
+                )
+            ).limit(limit_results)
+            rows = db.execute(query).all()
             for item_id, name in rows:
                 suggestions.append({"name": name, "url": f"/faculties?school_id={item_id}"})
 
