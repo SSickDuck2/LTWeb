@@ -385,9 +385,21 @@ def syllabus_page(
         return f"<h1>Error: {str(e)}</h1>"
     
 @app.get("/api/search/suggestions")
-def search_suggestions_api(q: str = Query(..., min_length=2), scope: str = Query(...)):
+def search_suggestions_api(
+    request: Request, # Thêm tham số request để đọc URL
+    q: str = Query(..., min_length=2), 
+    scope: str = Query(...)
+):
     try:
-        results = get_scoped_search_suggestions(keyword=q, scope=scope)
+        # Tự động quét xem người dùng đang ở trang có ID gì
+        parent_filters = {}
+        for key in ["curricula_id", "major_id", "faculty_id", "school_id"]:
+            val = request.query_params.get(key)
+            if val:
+                parent_filters[key] = val
+                
+        # Truyền bộ lọc vào database
+        results = get_scoped_search_suggestions(keyword=q, scope=scope, parent_filters=parent_filters)
         return {"status": "success", "data": results}
     except Exception as e:
         return {"status": "error", "message": str(e)}

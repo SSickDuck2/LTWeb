@@ -100,9 +100,10 @@
 .syllabus-item-value {
     color: #34384a;
     line-height: 1.6;
-    white-space: pre-wrap;
+    white-space: pre-wrap; /* Quan trọng: Giữ lại các dấu xuống dòng khi render */
 }
 
+/* Modal CSS */
 .syllabus-modal {
     position: fixed;
     inset: 0;
@@ -207,6 +208,67 @@
     margin-top: 6px;
 }
 
+/* ======================================= */
+/* TỐI ƯU HÓA CSS CHO NÚT IN (PRINT MODE) */
+/* ======================================= */
+@media print {
+    body {
+        background: #fff;
+        color: #000;
+    }
+    .container {
+        width: 100%;
+        max-width: none;
+        padding: 0;
+        margin: 0;
+    }
+    .page-card {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+    }
+    
+    /* Ẩn tất cả UI dư thừa khi in */
+    header, footer, .breadcrumb, .syllabus-actions, 
+    .draft-note, .syllabus-top p, #syllabus-modal, 
+    .print-hide {
+        display: none !important;
+    }
+
+    /* Định dạng lại phần hiển thị nội dung in */
+    .syllabus-page {
+        padding: 0 !important;
+    }
+    
+    .syllabus-top h2 {
+        font-size: 24pt;
+        text-align: center;
+        margin-bottom: 30px;
+        color: #000;
+    }
+    
+    .syllabus-plain {
+        border: none;
+        margin-bottom: 0;
+    }
+    
+    .syllabus-item {
+        page-break-inside: avoid;
+        border-bottom: 1px solid #ccc;
+        padding: 12px 0;
+    }
+    
+    .syllabus-item-label {
+        color: #333;
+        font-size: 11pt;
+    }
+    
+    .syllabus-item-value {
+        color: #000;
+        font-size: 12pt;
+    }
+}
+
 @media (max-width: 760px) {
     .syllabus-page {
         padding: 18px;
@@ -247,16 +309,16 @@
                 {% if lang == 'en' %}
                 Plain text syllabus view with 9 sections. Click "View details" to open editable detail box.
                 {% else %}
-                Bản đề cương thuần chữ gồm 9 mục. Bấm "Xem chi tiết" để mở box chi tiết có thể chỉnh sửa.
+                Bản đề cương thuần chữ gồm 9 mục.
                 {% endif %}
             </p>
         </div>
         <div class="syllabus-actions">
             <button type="button" id="open-detail-modal" class="btn-primary">
-                {% if lang == 'en' %}View Details{% else %}Xem Chi Tiết{% endif %}
+                {% if lang == 'en' %}View / Edit Details{% else %}Xem / Sửa Chi Tiết{% endif %}
             </button>
             <button type="button" id="print-syllabus" class="btn-soft">
-                {% if lang == 'en' %}Print Syllabus{% else %}In Đề Cương{% endif %}
+                {% if lang == 'en' %}🖨️ Print Syllabus{% else %}🖨️ In Đề Cương{% endif %}
             </button>
         </div>
     </div>
@@ -308,7 +370,7 @@
         {% endif %}
     </p>
 
-    <div style="margin-top: 26px; text-align: center;">
+    <div class="print-hide" style="margin-top: 26px; text-align: center;">
         <a href="/subjects?curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="btn-primary" style="text-decoration: none; display: inline-block;">
             {% if lang == 'en' %}← Back to Subjects{% else %}← Quay lại danh sách môn học{% endif %}
         </a>
@@ -365,10 +427,10 @@
             <div class="syllabus-modal-footer">
                 <div class="syllabus-footer-group">
                     <button type="button" id="save-draft" class="btn-primary">{% if lang == 'en' %}Save Draft{% else %}Lưu Tạm{% endif %}</button>
-                    <button type="button" id="reset-draft" class="btn-soft">{% if lang == 'en' %}Reset{% else %}Khôi Phục{% endif %}</button>
+                    <button type="button" id="reset-draft" class="btn-soft">{% if lang == 'en' %}Reset to Default{% else %}Khôi Phục Gốc{% endif %}</button>
                 </div>
                 <div class="syllabus-footer-group">
-                    <button type="button" id="print-from-modal" class="btn-soft">{% if lang == 'en' %}Print{% else %}In{% endif %}</button>
+                    <button type="button" id="print-from-modal" class="btn-soft">{% if lang == 'en' %}🖨️ Print{% else %}🖨️ In{% endif %}</button>
                     <button type="button" id="close-detail-modal" class="btn-soft">{% if lang == 'en' %}Close{% else %}Đóng{% endif %}</button>
                 </div>
             </div>
@@ -377,17 +439,6 @@
 
     <script id="syllabus-client-config" type="application/json">
         {{ {
-            "labels": {
-                "subCode": "Course Code" if lang == "en" else "Mã Môn",
-                "credits": "Credits" if lang == "en" else "Tín Chỉ",
-                "type": "Course Type" if lang == "en" else "Kiểu Môn",
-                "description": "Description" if lang == "en" else "Mô Tả",
-                "objectives": "Learning Objectives" if lang == "en" else "Mục Tiêu Học Tập",
-                "content": "Course Content" if lang == "en" else "Nội Dung",
-                "prerequisite": "Prerequisite" if lang == "en" else "Kiến Thức Tiên Quyết",
-                "assessment": "Assessment" if lang == "en" else "Đánh Giá",
-                "textbook": "Textbook" if lang == "en" else "Giáo Trình"
-            },
             "initialSyllabusData": {
                 "subCode": course_code,
                 "credits": credits,
@@ -398,9 +449,7 @@
                 "prerequisite": prerequisite,
                 "assessment": assessment,
                 "textbook": textbook
-            },
-            "subjectName": subject.attributes.name,
-            "printSubtitle": "Syllabus Details" if lang == "en" else "Chi tiết đề cương môn học"
+            }
         } | tojson }}
     </script>
 
@@ -424,18 +473,10 @@
             const configNode = document.getElementById('syllabus-client-config');
             let config = {};
             if (configNode) {
-                try {
-                    config = JSON.parse(configNode.textContent || '{}');
-                } catch (error) {
-                    config = {};
-                }
+                try { config = JSON.parse(configNode.textContent || '{}'); } catch (e) {}
             }
 
-            const labels = config.labels || {};
             const initialSyllabusData = config.initialSyllabusData || {};
-            const subjectNameForPrint = config.subjectName || '';
-            const printSubtitle = config.printSubtitle || '';
-
             const localStorageKey = 'syllabus-draft-{{ subject.id }}';
 
             function sanitizeValue(value) {
@@ -480,16 +521,17 @@
                 const data = collectFromEditor();
                 localStorage.setItem(localStorageKey, JSON.stringify(data));
                 applyToPreview(data);
+                // Highlight nút lưu để user biết đã lưu thành công
+                const oldText = saveDraftBtn.textContent;
+                saveDraftBtn.textContent = "✔ Saved!";
+                setTimeout(() => saveDraftBtn.textContent = oldText, 1500);
             }
 
             function loadDraft() {
                 const raw = localStorage.getItem(localStorageKey);
-                if (!raw) {
-                    return { ...initialSyllabusData };
-                }
+                if (!raw) return { ...initialSyllabusData };
                 try {
-                    const parsed = JSON.parse(raw);
-                    return { ...initialSyllabusData, ...parsed };
+                    return { ...initialSyllabusData, ...JSON.parse(raw) };
                 } catch (error) {
                     return { ...initialSyllabusData };
                 }
@@ -501,102 +543,46 @@
                 applyToPreview(initialSyllabusData);
             }
 
-            function escapeHtml(input) {
-                return (input || '').replace(/[&<>'"]/g, (char) => {
-                    const map = {
-                        '&': '&amp;',
-                        '<': '&lt;',
-                        '>': '&gt;',
-                        "'": '&#39;',
-                        '"': '&quot;'
-                    };
-                    return map[char] || char;
-                });
-            }
-
-            function printSyllabus(data) {
-                const sections = [
-                    'subCode', 'credits', 'type', 'description', 'objectives',
-                    'content', 'prerequisite', 'assessment', 'textbook'
-                ];
-
-                const sectionHtml = sections.map((key) => {
-                    const label = escapeHtml(labels[key] || key);
-                    const value = escapeHtml(data[key] || '').replace(/\n/g, '<br>');
-                    return `
-                        <div class="print-item">
-                            <div class="print-label">${label}</div>
-                            <div class="print-value">${value}</div>
-                        </div>
-                    `;
-                }).join('');
-
-                const printWindow = window.open('', '_blank', 'width=1000,height=800');
-                if (!printWindow) {
-                    return;
-                }
-
-                printWindow.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="UTF-8">
-                        <title>${escapeHtml(subjectNameForPrint)}</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; color: #1f2230; padding: 24px; }
-                            h1 { margin: 0 0 8px; font-size: 24px; }
-                            p { margin: 0 0 20px; color: #5d6378; }
-                            .print-item { border: 1px solid #dfe5f2; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
-                            .print-label { background: #f3f6fc; padding: 10px 12px; font-size: 12px; color: #4e566f; font-weight: 700; text-transform: uppercase; }
-                            .print-value { padding: 12px; line-height: 1.6; white-space: normal; }
-                            @media print { body { padding: 0; } }
-                        </style>
-                    </head>
-                    <body>
-                        <h1>${escapeHtml(subjectNameForPrint)}</h1>
-                        <p>${escapeHtml(printSubtitle)}</p>
-                        ${sectionHtml}
-                    </body>
-                    </html>
-                `);
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(() => {
-                    printWindow.print();
-                    printWindow.close();
-                }, 200);
-            }
-
+            // Gán dữ liệu ban đầu
             const startData = loadDraft();
             applyToEditor(startData);
             applyToPreview(startData);
 
+            // Gán sự kiện cho các nút trong Modal
             openModalBtn.addEventListener('click', openModal);
             closeTopBtn.addEventListener('click', closeModal);
             closeBtn.addEventListener('click', closeModal);
-
             modal.addEventListener('click', (event) => {
-                if (event.target === modal) {
-                    closeModal();
-                }
+                if (event.target === modal) closeModal();
             });
-
             saveDraftBtn.addEventListener('click', saveDraft);
             resetDraftBtn.addEventListener('click', resetDraft);
 
+            // TỐI ƯU NÚT IN (Gọi lệnh in gốc của trình duyệt kết hợp CSS @media print)
             printBtn.addEventListener('click', () => {
+                // Áp dụng dữ liệu mới nhất vào preview trước khi in
                 const liveData = collectFromEditor();
-                printSyllabus(liveData);
+                applyToPreview(liveData);
+                window.print();
             });
 
             printFromModalBtn.addEventListener('click', () => {
                 const liveData = collectFromEditor();
-                printSyllabus(liveData);
+                applyToPreview(liveData);
+                localStorage.setItem(localStorageKey, JSON.stringify(liveData)); // Tự động lưu bản nháp khi in
+                
+                // Đóng modal để bản in hiển thị sạch sẽ
+                closeModal();
+                
+                // Đợi modal đóng xong rồi mới mở hộp thoại in
+                setTimeout(() => {
+                    window.print();
+                }, 300);
             });
         })();
     </script>
     {% else %}
-    <div class="empty-state">
+    <div class="empty-state" style="padding: 40px; text-align: center;">
         <p>{% if lang == 'en' %}No syllabus information found{% else %}Không tìm thấy thông tin đề cương{% endif %}</p>
     </div>
     {% endif %}

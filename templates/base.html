@@ -63,8 +63,17 @@
 
             async function fetchSuggestions(keyword, scope) {
                 try {
-                    // Gửi cả từ khóa (q) và mục (scope) lên API
-                    const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(keyword)}&scope=${scope}`);
+                    // Đọc URL xem trang hiện tại có chứa ID của trường/viện/ngành nào không
+                    const urlParams = new URLSearchParams(window.location.search);
+                    let extraParams = '';
+                    ['curricula_id', 'major_id', 'faculty_id', 'school_id'].forEach(key => {
+                        if (urlParams.has(key)) {
+                            extraParams += `&${key}=${urlParams.get(key)}`;
+                        }
+                    });
+
+                    // Nối các tham số đó vào cuối đường link gửi cho API
+                    const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(keyword)}&scope=${scope}${extraParams}`);
                     const json = await response.json();
                     
                     if (json.status === 'success' && json.data.length > 0) {
