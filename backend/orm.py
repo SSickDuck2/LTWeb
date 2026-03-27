@@ -4,9 +4,10 @@ import os
 from typing import Optional
 from urllib.parse import quote_plus
 
-from sqlalchemy import JSON, ForeignKey, Index, Integer, create_engine
+from sqlalchemy import JSON, ForeignKey, Index, Integer, create_engine, Column, String, DateTime
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
+from sqlalchemy.sql import func
 
 
 def _load_env_file(env_path: str = ".env") -> None:
@@ -192,7 +193,6 @@ class Subject(Base):
 
     curriculum_links: Mapped[list["CurriculumSubject"]] = relationship(back_populates="subject")
 
-
 class CurriculumSubject(Base):
     __tablename__ = "curriculum_subjects"
     __table_args__ = (
@@ -208,6 +208,19 @@ class CurriculumSubject(Base):
     curriculum: Mapped[Curriculum] = relationship(back_populates="subject_links")
     subject: Mapped[Subject] = relationship(back_populates="curriculum_links")
 
+class Teacher(Base):
+    __tablename__ = "teachers"
+
+    teacher_code = Column(String(20), primary_key=True, index=True)
+    full_name = Column(String(100), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    
+    school_id = Column(Integer, ForeignKey("schools.id"))
+    faculty_id = Column(Integer, ForeignKey("faculties.id"))
+    major_id = Column(Integer, ForeignKey("majors.id"))
+    curricula_id = Column(Integer, ForeignKey("curricula.id"))
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 def create_schema(target_engine: Optional[Engine] = None) -> None:
     runtime_engine = target_engine or engine

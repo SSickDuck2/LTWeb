@@ -2,11 +2,14 @@ from math import ceil
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
+
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
 from backend.database import check_db_connection, get_single_item, get_subject_from_curriculum, get_table_data, get_scoped_search_suggestions
 from backend.routes.schools import router as schools_router
@@ -14,8 +17,11 @@ from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
 from backend.routes.curricula import router as curricula_router
 from backend.routes.subjects import router as subjects_router
+from backend.orm import Teacher
+from backend.database import get_db
 
 app = FastAPI(title="NEU Curriculum API", version="1.0.0")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -403,6 +409,96 @@ def search_suggestions_api(
         return {"status": "success", "data": results}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/siblings")
+def get_siblings_api(
+    request: Request,
+    table: str = Query(...),
+    parent_col: Optional[str] = Query(None),
+    parent_id: Optional[int] = Query(None)
+):
+    """API tải danh sách các mục con để hiển thị trong Dropdown Breadcrumb"""
+    try:
+        lang = _get_lang_from_request(request)
+        filters = {parent_col: parent_id} if parent_col and parent_id else None
+        
+        # Lấy tối đa 100 mục con
+        data = get_table_data(table, page=1, page_size=100, filters=filters)
+        items = [_apply_language(item, lang) for item in data.get("data", [])]
+        
+        # Chỉ trả về ID và Tên cho nhẹ
+        result = [{"id": item["id"], "name": item["attributes"]["name"]} for item in items]
+        return {"status": "success", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/login")
+def login_page(request: Request):
+    """Chỉ làm nhiệm vụ hiển thị trang login.html cho người dùng nhập liệu"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.post("/login")
+def login_process(
+    request: Request, 
+    teacher_code: str = Form(...),   
+    password: str = Form(...),       
+    db: Session = Depends(get_db)    
+):
+    """Xử lý dữ liệu khi người dùng bấm nút Đăng nhập"""
+    
+    # 1. Tìm giáo viên trong Database
+    teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+    
+    # 2. Kiểm tra mật khẩu (Tạm thời so sánh thẳng)
+    if not teacher or not pwd_context.verify(password, teacher.password_hash):
+        return templates.TemplateResponse("login.html", {
+            "request": request, 
+            "error": "Sai mã giảng viên hoặc mật khẩu"
+        })
+
+    # 3. Tạo cookie với dữ liệu ĐỘNG
+    response = RedirectResponse(url="/", status_code=302)
+    
+    response.set_cookie(key="user_token", value=teacher.teacher_code, max_age=86400, path="/")
+    
+    # Ép kiểu an toàn: Nếu có ID thì biến thành chuỗi, nếu NULL thì để chuỗi rỗng
+    response.set_cookie(key="user_token", value=teacher.teacher_code, path="/")
+    response.set_cookie(key="user_school_id", value=str(teacher.school_id) if teacher.school_id else "", path="/") 
+    response.set_cookie(key="user_faculty_id", value=str(teacher.faculty_id) if teacher.faculty_id else "", path="/") 
+    response.set_cookie(key="user_major_id", value=str(teacher.major_id) if teacher.major_id else "", path="/") 
+    response.set_cookie(key="user_curricula_id", value=str(teacher.curricula_id) if teacher.curricula_id else "", path="/")
+    
+    return response
+
+
+@app.get("/logout")
+def logout_mock(request: Request, next_url: str = "/"):
+    """Đăng xuất: Xóa SẠCH toàn bộ cookie"""
+    response = RedirectResponse(url=next_url, status_code=302)
+    response.delete_cookie("user_token", path="/")
+    response.delete_cookie("user_school_id", path="/")
+    response.delete_cookie("user_faculty_id", path="/")
+    response.delete_cookie("user_major_id", path="/")
+    response.delete_cookie("user_curricula_id", path="/")
+    return response
+
+
+@app.get("/my-curriculum")
+def my_curriculum(request: Request):
+    """Nút Đi tắt: Tự động chuyển hướng giảng viên thẳng đến trang CTĐT của họ"""
+    curricula_id = request.cookies.get("user_curricula_id")
+    major_id = request.cookies.get("user_major_id", "")
+    faculty_id = request.cookies.get("user_faculty_id", "")
+    school_id = request.cookies.get("user_school_id", "")
+    
+    if curricula_id:
+        # Truyền ĐỦ 4 biến để thanh Breadcrumb không bị gãy
+        target_url = f"/subjects?curricula_id={curricula_id}&major_id={major_id}&faculty_id={faculty_id}&school_id={school_id}"
+        return RedirectResponse(url=target_url, status_code=302)
+        
+    # Nếu chưa đăng nhập hoặc lỗi, bắt quay về trang chủ
+    return RedirectResponse(url="/", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
