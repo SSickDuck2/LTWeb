@@ -1,25 +1,25 @@
-{% extends "base.html" %}
+{% extends "UI/base.html" %}
+{% import "UI/components.html" as components with context %}
 
-{% block title %}Các Trường - NEU Curriculum{% endblock %}
+{% block title %}{% if lang == 'en' %}Schools{% else %}Các Trường{% endif %} - NEU Curriculum{% endblock %}
 
 {% block main_content %}
-<div class="breadcrumb">
-    <strong>Trang chủ</strong> <span>/</span> <strong>Các Trường</strong>
-</div>
-<div class="filters">
-    <div class="filter-group">
-        <form method="GET" style="display: flex; gap: 10px; align-items: center;">
-            <label for="search">Tìm kiếm:</label>
-            <div style="position: relative; flex: 1; max-width: 300px;">
-                <input type="text" id="search" name="search" data-scope="schools" placeholder="Nhập tên trường..." value="{{ search or '' }}" autocomplete="off" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                <div id="search-dropdown" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 300px; overflow-y: auto; text-align: left;">
-                </div>
-            </div>
-            <button type="submit">Tìm kiếm</button>
-            <a href="/" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
-        </form>
-    </div>
-</div>
+
+{% set bc_paths = [
+    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': None}
+] %}
+{{ components.breadcrumb(bc_paths) }}
+
+{{ components.search_bar(
+    action_url='/',
+    scope='schools',
+    placeholder='Enter school name...' if lang == 'en' else 'Nhập tên trường...',
+    search_val=search or '',
+    reset_url='/',
+    hidden_inputs=''
+) }}
+
 <div class="table-wrapper">
     {% if schools and schools|length > 0 %}
     <table>
@@ -47,21 +47,11 @@
         </tbody>
     </table>
 
-    {% if meta.total > meta.pageSize %}
-    <div class="pagination">
-        {% if meta.page > 1 %}
-        <a href="/?page=1" class="page-link">« Trang đầu</a>
-        <a href="/?page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
-        {% endif %}
-
-        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ (meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0) }}</strong></span>
-
-        {% if meta.page < ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) %}
-        <a href="/?page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
-        <a href="/?page={{ ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) }}" class="page-link">Trang cuối »</a>
-        {% endif %}
-    </div>
-    {% endif %}
+    {% set search_qs = ('&search=' ~ search|urlencode) if search else '' %}
+    {{ components.pagination(
+        meta=meta, 
+        base_url='/?' ~ search_qs
+    ) }}
     {% else %}
     <div class="empty-state">
         <p>Không tìm thấy trường nào</p>

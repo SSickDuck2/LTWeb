@@ -1,29 +1,34 @@
-{% extends "base.html" %}
+{% extends "UI/base.html" %}
+{% import "UI/components.html" as components with context %}
 
-{% block title %}Chương Trình Đào Tạo - NEU Curriculum{% endblock %}
+{% block title %}{% if lang == 'en' %}Curricula{% else %}Chương Trình Đào Tạo{% endif %} - NEU Curriculum{% endblock %}
 
 {% block main_content %}
-<div class="breadcrumb">
-    <a href="/">Trang chủ</a> <span>/</span> 
-    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span> 
-    <a href="/majors?faculty_id={{ faculty_id }}">{{ faculty_name }}</a> <span>/</span> 
-    <strong>{{ major_name }}</strong> <span>/</span> <strong>Chương Trình Đào Tạo</strong>
-</div>
-<div class="filters">
-    <div class="filter-group">
-        <form method="GET" style="display: flex; gap: 10px; align-items: center;">
-            <input type="hidden" name="major_id" value="{{ major_id }}">
-            <label for="search">Tìm kiếm:</label>
-            <div style="position: relative; flex: 1; max-width: 300px;">
-                <input type="text" id="search" name="search" data-scope="curricula" placeholder="Nhập tên chương trình..." value="{{ search or '' }}" autocomplete="off" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                <div id="search-dropdown" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 300px; overflow-y: auto; text-align: left;">
-                </div>
-            </div>
-            <button type="submit">Tìm kiếm</button>
-            <a href="/curricula?major_id={{ major_id }}" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
-        </form>
-    </div>
-</div>
+
+{% set bc_paths = [
+    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
+    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
+    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Curricula' if lang == 'en' else 'Các CTĐT', 'url': None}
+] %}
+{{ components.breadcrumb(bc_paths) }}
+
+{% set hidden_fields %}
+    <input type="hidden" name="school_id" value="{{ school_id }}">
+    <input type="hidden" name="faculty_id" value="{{ faculty_id }}">
+    <input type="hidden" name="major_id" value="{{ major_id }}">
+{% endset %}
+
+{{ components.search_bar(
+    action_url='/curricula',
+    scope='curricula',
+    placeholder='Enter curriculum name...' if lang == 'en' else 'Nhập tên chương trình...',
+    search_val=search or '',
+    reset_url='/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id,
+    hidden_inputs=hidden_fields
+) }}
+
 <div class="table-wrapper">
     {% if curricula and curricula|length > 0 %}
     <table>
@@ -49,21 +54,11 @@
         </tbody>
     </table>
 
-    {% if meta.total > meta.pageSize %}
-    <div class="pagination">
-        {% if meta.page > 1 %}
-        <a href="/curricula?major_id={{ major_id }}&page=1" class="page-link">« Trang đầu</a>
-        <a href="/curricula?major_id={{ major_id }}&page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
-        {% endif %}
-
-        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ (meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0) }}</strong></span>
-
-        {% if meta.page < ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) %}
-        <a href="/curricula?major_id={{ major_id }}&page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
-        <a href="/curricula?major_id={{ major_id }}&page={{ ((meta.total / meta.pageSize)|int + (1 if meta.total % meta.pageSize > 0 else 0)) }}" class="page-link">Trang cuối »</a>
-        {% endif %}
-    </div>
-    {% endif %}
+    {% set search_qs = ('&search=' ~ search|urlencode) if search else '' %}
+    {{ components.pagination(
+        meta=meta, 
+        base_url='/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id ~ search_qs
+    ) }}
     {% else %}
     <div class="empty-state">
         <p>Không tìm thấy chương trình đào tạo nào cho ngành này</p>

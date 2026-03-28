@@ -14,6 +14,7 @@ from backend.orm import (
     School,
     SessionLocal,
     Subject,
+    Teacher,
     create_schema,
 )
 
@@ -25,6 +26,7 @@ TABLE_MODELS: Dict[str, Type[Any]] = {
     "majors": Major,
     "curricula": Curriculum,
     "subjects": Subject,
+    "teachers": Teacher,
 }
 
 TABLE_FILTERS: Dict[str, Set[str]] = {
@@ -33,6 +35,7 @@ TABLE_FILTERS: Dict[str, Set[str]] = {
     "majors": {"faculty_id"},
     "curricula": {"major_id"},
     "subjects": {"curricula_id"},
+    "teachers": {"curricula_id", "major_id", "faculty_id", "school_id"},
 }
 
 
@@ -55,9 +58,12 @@ def _parse_json(text: Optional[str]) -> Dict[str, Any]:
 
 
 def check_db_connection() -> Dict[str, Any]:
-    with get_db() as db:
-        db.execute(text("SELECT 1"))
-        schools_count = int(db.scalar(select(func.count()).select_from(School)) or 0)
+    b = SessionLocal() # Khởi tạo trực tiếp (nhớ import SessionLocal ở đầu file)
+    try:
+        b.execute(text("SELECT 1"))
+        schools_count = int(b.scalar(select(func.count()).select_from(School)) or 0)
+    finally:
+        b.close()
 
     return {
         "database": "supabase-postgresql",
@@ -91,7 +97,6 @@ def _merge_subject_attributes(base_attributes: Dict[str, Any], link_attributes: 
     return merged
 
 
-@contextmanager
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
@@ -136,7 +141,8 @@ def get_subjects_by_curriculum(
     offset = (page - 1) * page_size
     normalized_search = (search or "").strip()
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         query = (
             select(Subject, CurriculumSubject.link_attributes_vn)
             .join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
@@ -163,10 +169,13 @@ def get_subjects_by_curriculum(
             "pageSize": page_size,
             "skippedRecords": offset,
         }
+    finally:
+        db.close()
 
 
 def get_subject_from_curriculum(curricula_id: int, subject_id: int) -> Optional[Dict[str, Any]]:
-    with get_db() as db:
+    db = SessionLocal() # Khởi tạo trực tiếp (nhớ import SessionLocal ở đầu file)
+    try:
         row = db.execute(
             select(Subject, CurriculumSubject.link_attributes_vn)
             .join(CurriculumSubject, CurriculumSubject.subject_id == Subject.id)
@@ -182,6 +191,8 @@ def get_subject_from_curriculum(curricula_id: int, subject_id: int) -> Optional[
         link_attributes = _parse_json(link_attributes_text)
         base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link_attributes)
         return base_item
+    finally:
+        db.close()
 
 
 def get_table_data(
@@ -208,7 +219,8 @@ def get_table_data(
 
     offset = (page - 1) * page_size
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         query = _build_query(table, id=id, filters=filters, search=search)
         total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
 
@@ -227,6 +239,8 @@ def get_table_data(
             "pageSize": page_size,
             "skippedRecords": offset,
         }
+    finally:
+        db.close()
 
 
 def create_item(
@@ -241,7 +255,8 @@ def create_item(
     attrs_data = attributes
     raw_data = {"attributes": attributes}
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         payload = {
             "attribute_vn": attrs_data,
             "raw_vn": raw_data,
@@ -264,6 +279,8 @@ def create_item(
 
         db.commit()
         return created_id
+    finally:
+        db.close()
 
 
 def update_item(table: str, id: int, attributes: Optional[Dict[str, Any]] = None) -> bool:
@@ -275,7 +292,8 @@ def update_item(table: str, id: int, attributes: Optional[Dict[str, Any]] = None
     attrs_data = attributes
     raw_data = {"attributes": attributes}
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         item = db.get(model, id)
         if item is None:
             return False
@@ -284,6 +302,9 @@ def update_item(table: str, id: int, attributes: Optional[Dict[str, Any]] = None
         item.raw_vn = raw_data
         db.commit()
         return True
+
+    finally:
+        db.close()
 
 
 def delete_item(table: str, id: Optional[int] = None, ids: Optional[List[int]] = None) -> int:
@@ -299,7 +320,8 @@ def delete_item(table: str, id: Optional[int] = None, ids: Optional[List[int]] =
 
     model = TABLE_MODELS[table]
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         existing_ids = db.execute(select(model.id).where(model.id.in_(target_ids))).scalars().all()
         if not existing_ids:
             return 0
@@ -312,23 +334,29 @@ def delete_item(table: str, id: Optional[int] = None, ids: Optional[List[int]] =
         result = db.execute(delete(model).where(model.id.in_(existing_ids)))
         db.commit()
         return int(result.rowcount or 0)
+    finally:
+        db.close()
 
 
 def get_single_item(table: str, id: int) -> Optional[Dict[str, Any]]:
     _validate_table(table)
     model = TABLE_MODELS[table]
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         item = db.get(model, id)
         if item is None:
             return None
         return _serialize_item(item)
+    finally:
+        db.close()
 
 
 def migrate_subject_links_from_curricula() -> int:
     created_links = 0
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         rows = db.execute(select(Curriculum.id, Curriculum.attribute_vn)).all()
 
         for curricula_id, attributes_text in rows:
@@ -374,20 +402,22 @@ def migrate_subject_links_from_curricula() -> int:
                     existing_link.link_attributes_vn = link_attributes
 
         db.commit()
-
+    finally:        
+        db.close()
     return created_links
 
 
 from sqlalchemy import select
 
-def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 2, parent_filters: dict = None) -> list[dict]:
+def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int = 6, parent_filters: dict = None) -> list[dict]:
     """Truy vấn gợi ý tìm kiếm có lọc theo trang hiện tại (Hỗ trợ tìm kiếm song ngữ)"""
     normalized_search = f"%{keyword.strip()}%"
     suggestions = []
     if parent_filters is None:
         parent_filters = {}
 
-    with get_db() as db:
+    db = SessionLocal()
+    try:
         if scope == "subjects":
             query = select(Subject.id, Subject.attribute_vn['name'].as_string())
             if parent_filters.get("curricula_id"):
@@ -461,5 +491,7 @@ def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int =
             rows = db.execute(query).all()
             for item_id, name in rows:
                 suggestions.append({"name": name, "url": f"/faculties?school_id={item_id}"})
-
+    finally:
+        db.close()
     return suggestions
+    

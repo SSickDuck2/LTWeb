@@ -1,0 +1,132 @@
+{% extends "UI/base.html" %}
+
+{% block title %}
+    {% if lang == 'en' %}Login{% else %}Đăng nhập{% endif %} - NEU Curriculum
+{% endblock %}
+
+{% block extra_css %}
+/* Căn giữa và thu gọn form đăng nhập trong thẻ page-card rộng */
+.login-container {
+    max-width: 420px;
+    margin: 40px auto;
+    padding: 20px;
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h2 {
+    color: #00529c; /* Màu xanh NEU */
+    margin-bottom: 8px;
+    font-size: 24px;
+}
+
+.login-header p {
+    color: #666;
+    font-size: 14px;
+    margin: 0;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: all 0.2s;
+}
+
+.form-group input:focus {
+    border-color: #00529c;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 82, 156, 0.1);
+}
+
+.btn-login {
+    width: 100%;
+    padding: 14px;
+    background-color: #00529c;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-top: 10px;
+}
+
+.btn-login:hover {
+    background-color: #003d75;
+}
+
+.error-message {
+    background-color: #fef2f2;
+    color: #c8102e; /* Màu đỏ NEU */
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    text-align: center;
+    border: 1px solid #fecaca;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+{% endblock %}
+
+{% block main_content %}
+<div class="login-container">
+    <div class="login-header">
+        <h2>{% if lang == 'en' %}Teacher Login{% else %}Đăng nhập Giảng viên{% endif %}</h2>
+        <p>{% if lang == 'en' %}Sign in to manage your curriculum{% else %}Đăng nhập để xem và quản lý chương trình đào tạo{% endif %}</p>
+    </div>
+
+    {% if error %}
+    <div class="error-message">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form action="/login" method="POST">
+        <div class="form-group">
+            <label for="teacher_code">{% if lang == 'en' %}Teacher ID{% else %}Mã Giảng viên{% endif %}</label>
+            <input type="text" id="teacher_code" name="teacher_code" placeholder="{% if lang == 'en' %}Enter your Teacher ID...{% else %}VD: 11260001{% endif %}" required autocomplete="off" autofocus>
+        </div>
+
+        <div class="form-group">
+            <label for="password">{% if lang == 'en' %}Password{% else %}Mật khẩu{% endif %}</label>
+            <input type="password" id="password" name="password" placeholder="{% if lang == 'en' %}Enter your password...{% else %}Nhập mật khẩu của bạn...{% endif %}" required>
+        </div>
+
+        <button type="submit" class="btn-login">
+            {% if lang == 'en' %}Sign In{% else %}Đăng nhập{% endif %}
+        </button>
+    </form>
+    
+    <div style="text-align: center; margin-top: 24px; font-size: 14px; color: #666;">
+        {% if lang == 'en' %}Don't have an account?{% else %}Bạn chưa có tài khoản?{% endif %} 
+        <a href="javascript:void(0);" onclick="alert('Vui lòng liên hệ phòng Quản lý Đào tạo để được cấp tài khoản.')" style="color: #c8102e; text-decoration: none; font-weight: 600;">
+            {% if lang == 'en' %}Contact Admin{% else %}Liên hệ Quản trị viên{% endif %}
+        </a>
+    </div>
+</div>
+{% endblock %}
