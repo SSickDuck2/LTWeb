@@ -4,11 +4,8 @@ FROM python:3.11-slim
 # Thiết lập thư mục làm việc trong container
 WORKDIR /app
 
-# Cài đặt các thư viện hệ thống cần thiết (đặc biệt quan trọng nếu bạn dùng psycopg2 kết nối PostgreSQL)
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Cập nhật pip để có phiên bản mới nhất, tránh các lỗi liên quan đến build dependency
+RUN pip install --upgrade pip
 
 # Copy file requirements và cài đặt dependencies
 COPY requirements.txt .
