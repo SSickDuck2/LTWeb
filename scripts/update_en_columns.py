@@ -1,29 +1,41 @@
 #!/usr/bin/env python3
 """
-Update attribute_en and raw_en columns on Supabase using data from syllabus_en.db.
+Import CSV data into Supabase *_new tables.
+
+Supported mappings:
+- faculties_rows.csv -> faculties_new
+- majors_rows.csv -> majors_new
+- curriculum_rows.csv -> curriculum_new
+- curriculum_subjects_rows.csv -> subjects_new
+- curriculum_subjects_rows.csv -> curriculum_subjects_new
 
 Usage:
-    python update_en_columns.py [--sqlite-db syllabus_en.db] [--supabase-db-url <url>]
+    python scripts/update_en_columns.py --targets all
+    python scripts/update_en_columns.py --targets faculties majors subjects curriculum_subjects
 """
+
 import argparse
+import csv
 import json
 import os
-import sqlite3
+import re
 import sys
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from decimal import Decimal, InvalidOperation
+from typing import Any, Callable, Dict, Iterable, Optional, Sequence
 
 import psycopg
 from psycopg.types.json import Jsonb
 
+
 # ---------------------------------------------------------------------------
-# Reuse env/connection helpers from migrate_to_supabase
+# Env / connection helpers
 # ---------------------------------------------------------------------------
 
 def load_env_file(env_path: str = ".env") -> None:
     if not os.path.exists(env_path):
         return
-    with open(env_path, "r", encoding="utf-8") as f:
-        for raw_line in f:
+    with open(env_path, "r", encoding="utf-8") as file_obj:
+        for raw_line in file_obj:
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
@@ -80,9 +92,9 @@ def _build_conninfo_from_parts(seed: Optional[Dict[str, str]] = None) -> Optiona
     }
     for field, env_keys in mapping.items():
         if field not in parts:
-            val = _first_non_empty_env(env_keys)
-            if val:
-                parts[field] = val
+            value = _first_non_empty_env(env_keys)
+            if value:
+                parts[field] = value
 
     if not parts.get("user") or not parts.get("host"):
         return None
@@ -116,8 +128,18 @@ def normalize_postgres_url(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Core helpers
+# Parsing helpers
 # ---------------------------------------------------------------------------
+
+def set_csv_field_size_limit() -> None:
+    limit = sys.maxsize
+    while True:
+        try:
+            csv.field_size_limit(limit)
+            return
+        except OverflowError:
+            limit //= 10
+
 
 def parse_json_text(value: Optional[str]) -> Dict[str, Any]:
     if not value:
@@ -129,163 +151,489 @@ def parse_json_text(value: Optional[str]) -> Dict[str, Any]:
         return {}
 
 
-def to_jsonb(value: Optional[str]) -> Jsonb:
-    return Jsonb(parse_json_text(value))
-
-
-def parse_pg_json(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        return parse_json_text(value)
-    return {}
-
-
-def normalize_key_value(value: Any) -> Optional[str]:
+def normalize_text(value: Any) -> Optional[str]:
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
-    return text.lower()
+    return text
 
 
-def find_key_token_from_dicts(dicts: Sequence[Dict[str, Any]], fields: Sequence[str]) -> Optional[str]:
-    for field in fields:
-        for data in dicts:
-            value = normalize_key_value(data.get(field))
-            if value:
-                return f"{field}:{value}"
+def to_int(value: Any) -> Optional[int]:
+    text = normalize_text(value)
+    if text is None:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def to_decimal(value: Any) -> Optional[Decimal]:
+    text = normalize_text(value)
+    if text is None:
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def to_bool(value: Any) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    text = normalize_text(value)
+    if text is None:
+        return None
+    low = text.lower()
+    if low in {"1", "true", "yes", "y"}:
+        return True
+    if low in {"0", "false", "no", "n"}:
+        return False
     return None
 
 
-KEY_FIELDS: Dict[str, List[str]] = {
-    "majors": ["majorCode", "slug"],
-    "curricula": ["curriculumCode", "slug"],
-    "subjects": ["subjectCode", "slug"],
+def parse_semester(value: Any) -> Optional[int]:
+    text = normalize_text(value)
+    if text is None:
+        return None
+    num = re.search(r"(\d+)", text)
+    if not num:
+        return None
+    return to_int(num.group(1))
+
+
+def pick(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def extract_code(attrs: Dict[str, Any], *candidate_keys: str) -> Optional[str]:
+    for key in candidate_keys:
+        value = normalize_text(attrs.get(key))
+        if value:
+            return value
+    return None
+
+
+def to_jsonb_obj(data: Dict[str, Any]) -> Jsonb:
+    return Jsonb(data if isinstance(data, dict) else {})
+
+
+# ---------------------------------------------------------------------------
+# Row mapping for each table
+# ---------------------------------------------------------------------------
+
+def map_curriculum_row(csv_row: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    row_id = to_int(csv_row.get("id"))
+    if row_id is None:
+        return None
+
+    vn = parse_json_text(csv_row.get("attribute_vn"))
+    en = parse_json_text(csv_row.get("attribute_en"))
+    raw_vn = parse_json_text(csv_row.get("raw_vn"))
+    raw_en = parse_json_text(csv_row.get("raw_en"))
+
+    year = to_int(vn.get("effective_year"))
+    if year is None:
+        year = to_int(vn.get("effectiveYear"))
+    if year is None:
+        year_text = normalize_text(vn.get("year"))
+        if year_text:
+            matches = re.findall(r"\b(19\d{2}|20\d{2}|21\d{2})\b", year_text)
+            if matches:
+                year = int(matches[-1])
+
+    return {
+        "id": row_id,
+        "major_id": to_int(csv_row.get("major_id")),
+        "name": normalize_text(vn.get("name")),
+        "slug": normalize_text(vn.get("slug")),
+        "locale": normalize_text(vn.get("locale")),
+        "description": normalize_text(vn.get("description")),
+        "code": extract_code(vn, "code", "curriculumCode", "curriculaCode"),
+        "credits": to_decimal(vn.get("credits")),
+        "effective_year": year,
+        "created_at": normalize_text(pick(vn.get("createdAt"), en.get("createdAt"))),
+        "updated_at": normalize_text(pick(vn.get("updatedAt"), en.get("updatedAt"))),
+        "published_at": normalize_text(pick(vn.get("publishedAt"), en.get("publishedAt"))),
+        "raw_attributes": to_jsonb_obj(raw_vn),
+        "vn_name": normalize_text(vn.get("name")),
+        "vn_slug": normalize_text(vn.get("slug")),
+        "vn_locale": normalize_text(vn.get("locale")),
+        "vn_description": normalize_text(vn.get("description")),
+        "vn_code": extract_code(vn, "code", "curriculumCode", "curriculaCode"),
+        "vn_raw_attributes": to_jsonb_obj(raw_vn),
+        "en_name": normalize_text(en.get("name")),
+        "en_slug": normalize_text(en.get("slug")),
+        "en_locale": normalize_text(en.get("locale")),
+        "en_description": normalize_text(en.get("description")),
+        "en_code": extract_code(en, "code", "curriculumCode", "curriculaCode"),
+        "en_raw_attributes": to_jsonb_obj(raw_en),
+    }
+
+
+def map_faculty_row(csv_row: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    row_id = to_int(csv_row.get("id"))
+    if row_id is None:
+        return None
+
+    vn = parse_json_text(csv_row.get("attribute_vn"))
+    en = parse_json_text(csv_row.get("attribute_en"))
+    raw_vn = parse_json_text(csv_row.get("raw_vn"))
+    raw_en = parse_json_text(csv_row.get("raw_en"))
+
+    return {
+        "id": row_id,
+        "school_id": to_int(csv_row.get("school_id")),
+        "en_name": normalize_text(en.get("name")),
+        "en_slug": normalize_text(en.get("slug")),
+        "en_locale": normalize_text(en.get("locale")),
+        "en_description": normalize_text(en.get("description")),
+        "en_code": extract_code(en, "code", "facultyCode"),
+        "created_at": normalize_text(pick(vn.get("createdAt"), en.get("createdAt"))),
+        "updated_at": normalize_text(pick(vn.get("updatedAt"), en.get("updatedAt"))),
+        "published_at": normalize_text(pick(vn.get("publishedAt"), en.get("publishedAt"))),
+        "en_raw_attributes": to_jsonb_obj(raw_en),
+        "vn_name": normalize_text(vn.get("name")),
+        "vn_slug": normalize_text(vn.get("slug")),
+        "vn_locale": normalize_text(vn.get("locale")),
+        "vn_description": normalize_text(vn.get("description")),
+        "vn_code": extract_code(vn, "code", "facultyCode"),
+        "vn_raw_attributes": to_jsonb_obj(raw_vn),
+    }
+
+
+def map_major_row(csv_row: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    row_id = to_int(csv_row.get("id"))
+    if row_id is None:
+        return None
+
+    vn = parse_json_text(csv_row.get("attribute_vn"))
+    en = parse_json_text(csv_row.get("attribute_en"))
+    raw_vn = parse_json_text(csv_row.get("raw_vn"))
+    raw_en = parse_json_text(csv_row.get("raw_en"))
+
+    code_vn = extract_code(vn, "majorCode", "code", "facultyCode")
+    code_en = extract_code(en, "majorCode", "code", "facultyCode")
+
+    return {
+        "id": row_id,
+        "faculty_id": to_int(csv_row.get("faculty_id")),
+        "name": normalize_text(vn.get("name")),
+        "slug": normalize_text(vn.get("slug")),
+        "locale": normalize_text(vn.get("locale")),
+        "description": normalize_text(vn.get("description")),
+        "faculty_code": code_vn,
+        "major_code": code_vn,
+        "created_at": normalize_text(pick(vn.get("createdAt"), en.get("createdAt"))),
+        "updated_at": normalize_text(pick(vn.get("updatedAt"), en.get("updatedAt"))),
+        "published_at": normalize_text(pick(vn.get("publishedAt"), en.get("publishedAt"))),
+        "raw_attributes": to_jsonb_obj(raw_vn),
+        "vn_name": normalize_text(vn.get("name")),
+        "vn_slug": normalize_text(vn.get("slug")),
+        "vn_locale": normalize_text(vn.get("locale")),
+        "vn_description": normalize_text(vn.get("description")),
+        "vn_faculty_code": code_vn,
+        "vn_major_code": code_vn,
+        "vn_raw_attributes": to_jsonb_obj(raw_vn),
+        "en_name": normalize_text(en.get("name")),
+        "en_slug": normalize_text(en.get("slug")),
+        "en_locale": normalize_text(en.get("locale")),
+        "en_description": normalize_text(en.get("description")),
+        "en_faculty_code": code_en,
+        "en_major_code": code_en,
+        "en_raw_attributes": to_jsonb_obj(raw_en),
+    }
+
+
+def map_curriculum_subject_row(csv_row: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    curriculum_id = to_int(csv_row.get("curricula_id"))
+    subject_id = to_int(csv_row.get("subject_id"))
+    if curriculum_id is None or subject_id is None:
+        return None
+
+    vn = parse_json_text(csv_row.get("link_attributes_vn"))
+    en = parse_json_text(csv_row.get("link_attributes_en"))
+
+    vn_subject_attrs = (
+        vn.get("curriculum_subject", {})
+        .get("data", {})
+        .get("attributes", {})
+    )
+    en_subject_attrs = (
+        en.get("curriculum_subject", {})
+        .get("data", {})
+        .get("attributes", {})
+    )
+
+    return {
+        "id": curriculum_id * 10_000_000 + subject_id,
+        "curriculum_id": curriculum_id,
+        "curricula_id": curriculum_id,
+        "subject_id": subject_id,
+        "semester": parse_semester(pick(vn.get("semester"), en.get("semester"))),
+        "year": to_int(pick(vn.get("year"), en.get("year"))),
+        "mandatory": to_bool(pick(vn.get("required"), en.get("required"), vn.get("mandatory"), en.get("mandatory"))),
+        "credit_value": to_decimal(
+            pick(
+                vn.get("credits"),
+                en.get("credits"),
+                vn_subject_attrs.get("credits"),
+                en_subject_attrs.get("credits"),
+            )
+        ),
+        "link_note": normalize_text(pick(vn.get("note"), en.get("note"))),
+        "link_attributes": to_jsonb_obj(vn if vn else en),
+        "created_at": normalize_text(pick(vn.get("createdAt"), en.get("createdAt"))),
+        "updated_at": normalize_text(pick(vn.get("updatedAt"), en.get("updatedAt"))),
+        "vn_note": normalize_text(pick(vn.get("note"), en.get("note"))),
+        "vn_language": normalize_text(pick(vn.get("language"), en.get("language"))),
+        "vn_curriculum_subject_name": normalize_text(pick(vn_subject_attrs.get("name"), en_subject_attrs.get("name"))),
+        "vn_curriculum_subject_slug": normalize_text(pick(vn_subject_attrs.get("slug"), en_subject_attrs.get("slug"))),
+        "en_note": normalize_text(pick(en.get("note"), vn.get("note"))),
+        "en_language": normalize_text(pick(en.get("language"), vn.get("language"))),
+        "en_curriculum_subject_name": normalize_text(pick(en_subject_attrs.get("name"), vn_subject_attrs.get("name"))),
+        "en_curriculum_subject_slug": normalize_text(pick(en_subject_attrs.get("slug"), vn_subject_attrs.get("slug"))),
+    }
+
+
+def map_subject_row_from_link(csv_row: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    subject_id = to_int(csv_row.get("subject_id"))
+    if subject_id is None:
+        return None
+
+    vn = parse_json_text(csv_row.get("link_attributes_vn"))
+    en = parse_json_text(csv_row.get("link_attributes_en"))
+
+    vn_subject_data = vn.get("curriculum_subject", {}).get("data", {})
+    en_subject_data = en.get("curriculum_subject", {}).get("data", {})
+
+    vn_attr = vn_subject_data.get("attributes", {}) if isinstance(vn_subject_data, dict) else {}
+    en_attr = en_subject_data.get("attributes", {}) if isinstance(en_subject_data, dict) else {}
+
+    return {
+        "id": subject_id,
+        "code": extract_code(vn_attr, "subjectCode", "code"),
+        "slug": normalize_text(vn_attr.get("slug")),
+        "name": normalize_text(vn_attr.get("name")),
+        "locale": normalize_text(vn_attr.get("locale")),
+        "short_name": normalize_text(pick(vn_attr.get("shortName"), vn_attr.get("short_name"))),
+        "description": normalize_text(vn_attr.get("description")),
+        "credits": to_decimal(vn_attr.get("credits")),
+        "lecture_hours": to_int(pick(vn_attr.get("theoryLessons"), vn_attr.get("lectureHours"), vn_attr.get("lecture_hours"))),
+        "practice_hours": to_int(pick(vn_attr.get("practiceLessons"), vn_attr.get("practiceHours"), vn_attr.get("practice_hours"))),
+        "created_at": normalize_text(pick(vn_attr.get("createdAt"), en_attr.get("createdAt"))),
+        "updated_at": normalize_text(pick(vn_attr.get("updatedAt"), en_attr.get("updatedAt"))),
+        "published_at": normalize_text(pick(vn_attr.get("publishedAt"), en_attr.get("publishedAt"))),
+        "raw_attributes": to_jsonb_obj(vn_subject_data if isinstance(vn_subject_data, dict) else vn_attr),
+        "en_name": normalize_text(pick(en_attr.get("name"), vn_attr.get("name"))),
+        "en_slug": normalize_text(pick(en_attr.get("slug"), vn_attr.get("slug"))),
+        "en_locale": normalize_text(pick(en_attr.get("locale"), vn_attr.get("locale"))),
+        "en_short_name": normalize_text(pick(en_attr.get("shortName"), en_attr.get("short_name"), vn_attr.get("shortName"), vn_attr.get("short_name"))),
+        "en_description": normalize_text(pick(en_attr.get("description"), vn_attr.get("description"))),
+        "en_code": extract_code(en_attr, "subjectCode", "code") or extract_code(vn_attr, "subjectCode", "code"),
+        "en_raw_attributes": to_jsonb_obj(en_subject_data if isinstance(en_subject_data, dict) else en_attr),
+        "vn_name": normalize_text(pick(vn_attr.get("name"), en_attr.get("name"))),
+        "vn_slug": normalize_text(pick(vn_attr.get("slug"), en_attr.get("slug"))),
+        "vn_locale": normalize_text(pick(vn_attr.get("locale"), en_attr.get("locale"))),
+        "vn_short_name": normalize_text(pick(vn_attr.get("shortName"), vn_attr.get("short_name"), en_attr.get("shortName"), en_attr.get("short_name"))),
+        "vn_description": normalize_text(pick(vn_attr.get("description"), en_attr.get("description"))),
+        "vn_code": extract_code(vn_attr, "subjectCode", "code") or extract_code(en_attr, "subjectCode", "code"),
+        "vn_raw_attributes": to_jsonb_obj(vn_subject_data if isinstance(vn_subject_data, dict) else vn_attr),
+    }
+
+
+# ---------------------------------------------------------------------------
+# SQL helpers
+# ---------------------------------------------------------------------------
+
+def quote_ident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def get_table_columns(cursor: psycopg.Cursor, table_name: str) -> set[str]:
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = %s
+        """,
+        (table_name,),
+    )
+    return {row[0] for row in cursor.fetchall()}
+
+
+def build_upsert_sql(table_name: str, columns: list[str], conflict_columns: list[str]) -> str:
+    q_table = quote_ident(table_name)
+    q_cols = [quote_ident(c) for c in columns]
+    placeholders = ["%s"] * len(columns)
+
+    valid_conflicts = [c for c in conflict_columns if c in columns]
+    updates = [c for c in columns if c not in valid_conflicts]
+
+    insert_part = (
+        f"INSERT INTO {q_table} ({', '.join(q_cols)}) "
+        f"VALUES ({', '.join(placeholders)})"
+    )
+
+    if not valid_conflicts:
+        return insert_part
+
+    if not updates:
+        return f"{insert_part} ON CONFLICT ({', '.join(quote_ident(c) for c in valid_conflicts)}) DO NOTHING"
+
+    update_part = ", ".join(f"{quote_ident(c)} = EXCLUDED.{quote_ident(c)}" for c in updates)
+    return (
+        f"{insert_part} "
+        f"ON CONFLICT ({', '.join(quote_ident(c) for c in valid_conflicts)}) "
+        f"DO UPDATE SET {update_part}"
+    )
+
+
+def execute_batch_upsert(
+    cursor: psycopg.Cursor,
+    table_name: str,
+    rows: list[Dict[str, Any]],
+    conflict_preferences: list[list[str]],
+) -> int:
+    if not rows:
+        return 0
+
+    table_columns = get_table_columns(cursor, table_name)
+    if not table_columns:
+        raise RuntimeError(f"Target table not found or has no columns: {table_name}")
+
+    filtered_rows = []
+    for row in rows:
+        filtered = {k: v for k, v in row.items() if k in table_columns}
+        if filtered:
+            filtered_rows.append(filtered)
+
+    if not filtered_rows:
+        return 0
+
+    ordered_columns: list[str] = []
+    seen: set[str] = set()
+    for row in filtered_rows:
+        for key in row.keys():
+            if key not in seen:
+                seen.add(key)
+                ordered_columns.append(key)
+
+    conflict_columns: list[str] = []
+    for candidate in conflict_preferences:
+        if all(col in table_columns for col in candidate):
+            conflict_columns = candidate
+            break
+
+    sql = build_upsert_sql(table_name, ordered_columns, conflict_columns)
+    params = [tuple(row.get(col) for col in ordered_columns) for row in filtered_rows]
+    cursor.executemany(sql, params)
+    return len(filtered_rows)
+
+
+# ---------------------------------------------------------------------------
+# Import jobs
+# ---------------------------------------------------------------------------
+
+MapFn = Callable[[Dict[str, str]], Optional[Dict[str, Any]]]
+
+JOBS: Dict[str, Dict[str, Any]] = {
+    "faculties": {
+        "csv": "faculties_rows.csv",
+        "table": "faculties_new",
+        "map_fn": map_faculty_row,
+        "conflicts": [["id"]],
+    },
+    "majors": {
+        "csv": "majors_rows.csv",
+        "table": "majors_new",
+        "map_fn": map_major_row,
+        "conflicts": [["id"]],
+    },
+    "curriculum": {
+        "csv": "curriculum_rows.csv",
+        "table": "curriculum_new",
+        "map_fn": map_curriculum_row,
+        "conflicts": [["id"]],
+    },
+    "subjects": {
+        "csv": "curriculum_subjects_rows.csv",
+        "table": "subjects_new",
+        "map_fn": map_subject_row_from_link,
+        "conflicts": [["id"]],
+    },
+    "curriculum_subjects": {
+        "csv": "curriculum_subjects_rows.csv",
+        "table": "curriculum_subjects_new",
+        "map_fn": map_curriculum_subject_row,
+        "conflicts": [["id"], ["curricula_id", "subject_id"]],
+    },
 }
 
 
-def build_supabase_key_map(cursor: psycopg.Cursor, table: str) -> Dict[str, int]:
-    fields = KEY_FIELDS.get(table)
-    if not fields:
-        return {}
+def import_one_job(
+    cursor: psycopg.Cursor,
+    csv_path: str,
+    table_name: str,
+    map_fn: MapFn,
+    conflict_preferences: list[list[str]],
+    batch_size: int,
+) -> tuple[int, int, int]:
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
-    cursor.execute(f"SELECT id, attribute_vn, raw_vn FROM {table}")
-    rows = cursor.fetchall()
+    source_rows = 0
+    mapped_rows = 0
+    upserted_rows = 0
 
-    key_map: Dict[str, int] = {}
-    for row in rows:
-        target_id = int(row[0])
-        attr = parse_pg_json(row[1])
-        raw = parse_pg_json(row[2])
-        raw_attr = parse_pg_json(raw.get("attributes"))
+    with open(csv_path, "r", encoding="utf-8", newline="") as file_obj:
+        reader = csv.DictReader(file_obj)
+        batch: list[Dict[str, Any]] = []
 
-        token = find_key_token_from_dicts((attr, raw_attr, raw), fields)
-        if token and token not in key_map:
-            key_map[token] = target_id
+        for raw_row in reader:
+            source_rows += 1
+            mapped = map_fn(raw_row)
+            if mapped is None:
+                continue
+            mapped_rows += 1
+            batch.append(mapped)
 
-    return key_map
+            if len(batch) >= batch_size:
+                upserted_rows += execute_batch_upsert(cursor, table_name, batch, conflict_preferences)
+                batch.clear()
+
+        if batch:
+            upserted_rows += execute_batch_upsert(cursor, table_name, batch, conflict_preferences)
+
+    return source_rows, mapped_rows, upserted_rows
 
 
-# ---------------------------------------------------------------------------
-# Main update logic
-# ---------------------------------------------------------------------------
-
-# Tables that have a simple id column (no parent FK needed here)
-SIMPLE_TABLES = ["schools", "faculties", "majors", "curricula", "subjects"]
-
-
-def update_en_columns(sqlite_db_path: str, supabase_db_url: str) -> None:
-    if not os.path.exists(sqlite_db_path):
-        raise FileNotFoundError(f"SQLite file not found: {sqlite_db_path}")
-
+def import_jobs(targets: list[str], supabase_db_url: str, batch_size: int) -> None:
     pg_url = normalize_postgres_url(supabase_db_url)
 
-    sqlite_conn = sqlite3.connect(sqlite_db_path)
-    sqlite_conn.row_factory = sqlite3.Row
+    with psycopg.connect(pg_url, autocommit=False) as pg_conn:
+        with pg_conn.cursor() as cursor:
+            for key in targets:
+                job = JOBS[key]
+                source_rows, mapped_rows, upserted_rows = import_one_job(
+                    cursor=cursor,
+                    csv_path=job["csv"],
+                    table_name=job["table"],
+                    map_fn=job["map_fn"],
+                    conflict_preferences=job["conflicts"],
+                    batch_size=batch_size,
+                )
+                print(
+                    f"- {key}: table={job['table']}, csv={job['csv']}, "
+                    f"source={source_rows}, mapped={mapped_rows}, upserted={upserted_rows}"
+                )
 
-    try:
-        with psycopg.connect(pg_url, autocommit=False) as pg_conn:
-            with pg_conn.cursor() as cursor:
-                for table in SIMPLE_TABLES:
-                    rows = sqlite_conn.execute(
-                        f"SELECT id, attributes, raw FROM {table} ORDER BY id"
-                    ).fetchall()
-
-                    if not rows:
-                        print(f"- {table}: no rows in source, skipped")
-                        continue
-
-                    cursor.execute(f"SELECT id FROM {table}")
-                    target_ids = {int(r[0]) for r in cursor.fetchall()}
-                    key_map = build_supabase_key_map(cursor, table)
-
-                    payload_by_target_id: Dict[int, Tuple[Jsonb, Jsonb]] = {}
-                    matched_by_offset = 0
-                    matched_by_direct_id = 0
-                    matched_by_key = 0
-                    unmatched = 0
-
-                    for row in rows:
-                        src_id = int(row["id"])
-                        target_id: Optional[int] = None
-
-                        # EN and VN datasets are usually shifted by +1 id; try that first.
-                        if (src_id - 1) in target_ids:
-                            target_id = src_id - 1
-                            matched_by_offset += 1
-                        elif src_id in target_ids:
-                            target_id = src_id
-                            matched_by_direct_id += 1
-                        else:
-                            fields = KEY_FIELDS.get(table)
-                            if fields:
-                                attr = parse_json_text(row["attributes"])
-                                raw = parse_json_text(row["raw"])
-                                raw_attr = parse_pg_json(raw.get("attributes"))
-                                token = find_key_token_from_dicts((attr, raw_attr, raw), fields)
-                                if token and token in key_map:
-                                    target_id = key_map[token]
-                                    matched_by_key += 1
-
-                        if target_id is None:
-                            unmatched += 1
-                            continue
-
-                        payload_by_target_id[target_id] = (to_jsonb(row["attributes"]), to_jsonb(row["raw"]))
-
-                    if not payload_by_target_id:
-                        print(f"- {table}: no matched rows (source={len(rows)}, unmatched={unmatched})")
-                        continue
-
-                    payload = [
-                        (attribute_en, raw_en, target_id)
-                        for target_id, (attribute_en, raw_en) in payload_by_target_id.items()
-                    ]
-
-                    cursor.executemany(
-                        f"""
-                        UPDATE {table}
-                        SET attribute_en = %s,
-                            raw_en       = %s
-                        WHERE id = %s;
-                        """,
-                        payload,
-                    )
-                    overwritten_due_duplicate_target = len(rows) - unmatched - len(payload_by_target_id)
-                    print(
-                        f"- {table}: updated={len(payload_by_target_id)} "
-                        f"(source={len(rows)}, offset={matched_by_offset}, direct={matched_by_direct_id}, key={matched_by_key}, "
-                        f"unmatched={unmatched}, duplicate_target={max(overwritten_due_duplicate_target, 0)})"
-                    )
-
-            pg_conn.commit()
-
-    finally:
-        sqlite_conn.close()
-
-    print("\nDone.")
+        pg_conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -294,14 +642,23 @@ def update_en_columns(sqlite_db_path: str, supabase_db_url: str) -> None:
 
 def main() -> None:
     load_env_file()
+    set_csv_field_size_limit()
 
     parser = argparse.ArgumentParser(
-        description="Update attribute_en / raw_en columns on Supabase from syllabus_en.db"
+        description="Import CSV data into Supabase *_new tables"
     )
     parser.add_argument(
-        "--sqlite-db",
-        default="syllabus_en.db",
-        help="Path to the English SQLite DB (default: syllabus_en.db)",
+        "--targets",
+        nargs="+",
+        choices=["all", *JOBS.keys()],
+        default=["all"],
+        help="Import targets (default: all)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1000,
+        help="Rows per batch upsert (default: 1000)",
     )
     parser.add_argument(
         "--supabase-db-url",
@@ -314,6 +671,10 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.batch_size <= 0:
+        print("--batch-size must be a positive integer")
+        sys.exit(1)
+
     if not args.supabase_db_url:
         print(
             "Missing Supabase DB URL. Pass --supabase-db-url or set SUPABASE_DB_URL "
@@ -321,10 +682,14 @@ def main() -> None:
         )
         sys.exit(1)
 
+    selected_targets = list(JOBS.keys()) if "all" in args.targets else args.targets
+
     try:
-        update_en_columns(args.sqlite_db, args.supabase_db_url)
+        print("Starting import...")
+        import_jobs(selected_targets, args.supabase_db_url, args.batch_size)
+        print("Import completed.")
     except Exception as exc:
-        print(f"Update failed: {exc}")
+        print(f"Import failed: {exc}")
         sys.exit(1)
 
 
