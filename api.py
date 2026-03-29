@@ -476,9 +476,6 @@ def subjects_page(
         return f"<h1>Error: {str(e)}</h1>"
 
 
-import json
-import os
-
 @app.get("/syllabus", response_class=HTMLResponse)
 def syllabus_page(
     request: Request,
@@ -499,7 +496,6 @@ def syllabus_page(
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
-        
         subject = None
         if curricula_id_int is not None:
             subject = get_subject_from_curriculum(curricula_id_int, subject_id)
@@ -513,14 +509,7 @@ def syllabus_page(
         faculty_name = _resolve_name("faculties", faculty_id_int, lang)
         school_name = _resolve_name("schools", school_id_int, lang)
 
-        syllabus_detail = None
-        try:
-            with open("detailSyllabus.json", "r", encoding="utf-8") as f:
-                syllabus_detail = json.load(f)
-        except Exception as e:
-            print(f"Không thể đọc file JSON: {e}")
-
-        return templates.TemplateResponse(
+        return _template_response(
             "syllabus.html",
             request,
             {
@@ -583,6 +572,73 @@ def get_siblings_api(
         return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/login")
+def login_page(request: Request):
+    """Chỉ làm nhiệm vụ hiển thị trang login.html cho người dùng nhập liệu"""
+    return _template_response("login.html", request)
+
+
+@app.post("/login")
+def login_process(
+    request: Request, 
+    teacher_code: str = Form(...),   
+    password: str = Form(...),       
+    db: Session = Depends(get_db)    
+):
+    """Xử lý dữ liệu khi người dùng bấm nút Đăng nhập"""
+    
+    # 1. Tìm giáo viên trong Database
+    teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+    
+    # 2. Kiểm tra mật khẩu (Tạm thời so sánh thẳng)
+    if not teacher or not pwd_context.verify(password, teacher.password_hash):
+        return _template_response(
+            "login.html",
+            request,
+            {
+                "error": "Sai mã giảng viên hoặc mật khẩu",
+            },
+        )
+
+    # 3. Tạo cookie với dữ liệu ĐỘNG
+    response = RedirectResponse(url="/", status_code=302)
+    
+    response.set_cookie(key="user_token", value=teacher.teacher_code, max_age=86400, path="/")
+    
+    # Ép kiểu an toàn: Nếu có ID thì biến thành chuỗi, nếu NULL thì để chuỗi rỗng
+    response.set_cookie(key="user_token", value=teacher.teacher_code, path="/")
+    response.set_cookie(key="user_school_id", value=str(teacher.school_id) if teacher.school_id else "", path="/") 
+    response.set_cookie(key="user_faculty_id", value=str(teacher.faculty_id) if teacher.faculty_id else "", path="/") 
+    response.set_cookie(key="user_major_id", value=str(teacher.major_id) if teacher.major_id else "", path="/") 
+    response.set_cookie(key="user_curricula_id", value=str(teacher.curricula_id) if teacher.curricula_id else "", path="/")
+    
+    return response
+
+
+@app.get("/logout")
+def logout(request: Request):
+    """Clear session and redirect to login"""
+    request.session.clear()
+    response = RedirectResponse(url="/login", status_code=303)
+    return response
+
+
+@app.get("/my-curriculum")
+def my_curriculum(request: Request):
+    """Nút Đi tắt: Tự động chuyển hướng giảng viên thẳng đến trang CTĐT của họ"""
+    curricula_id = request.cookies.get("user_curricula_id")
+    major_id = request.cookies.get("user_major_id", "")
+    faculty_id = request.cookies.get("user_faculty_id", "")
+    school_id = request.cookies.get("user_school_id", "")
+    
+    if curricula_id:
+        # Truyền ĐỦ 4 biến để thanh Breadcrumb không bị gãy
+        target_url = f"/subjects?curricula_id={curricula_id}&major_id={major_id}&faculty_id={faculty_id}&school_id={school_id}"
+        return RedirectResponse(url=target_url, status_code=302)
+        
+    # Nếu chưa đăng nhập hoặc lỗi, bắt quay về trang chủ
+    return RedirectResponse(url="/", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
