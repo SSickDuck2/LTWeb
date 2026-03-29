@@ -11,7 +11,8 @@ psycopg[binary]
 jinja2
 
 # Authentication & Security
-passlib[bcrypt]
+passlib
+bcrypt<4.0.0
 itsdangerous
 
 # HTTP Client (for scripts)
