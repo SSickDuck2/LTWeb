@@ -5,11 +5,6 @@
 
 {% block main_content %}
 
-{% set bc_paths = [
-    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
-    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
-    {'name': 'Faculties' if lang == 'en' else 'Các Khoa/Viện', 'url': None}
-] %}
 {{ components.breadcrumb(bc_paths) }}
 
 {% set hidden_fields %}

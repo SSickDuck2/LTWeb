@@ -5,13 +5,6 @@
 
 {% block main_content %}
 
-{% set bc_paths = [
-    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
-    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
-    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
-    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Curricula' if lang == 'en' else 'Các CTĐT', 'url': None}
-] %}
 {{ components.breadcrumb(bc_paths) }}
 
 {% set hidden_fields %}

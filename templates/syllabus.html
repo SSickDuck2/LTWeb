@@ -114,39 +114,8 @@
 
 {% block main_content %}
 
-{% set bc_paths = [
-    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
-    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
-    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
-    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Curricula' if lang == 'en' else 'CTĐT', 'url': '/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Subjects' if lang == 'en' else 'Môn học', 'url': '/subjects?curricula_id=' ~ curricula_id ~ '&major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Syllabus' if lang == 'en' else 'Đề cương', 'url': None}
-] %}
-{{ components.breadcrumb(bc_paths) }}
 
-<div class="syllabus-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-    <h2 style="color: #00529c; margin: 0;">{% if lang == 'en' %}Syllabus Details{% else %}Chi tiết Đề cương{% endif %}</h2>
-    
-    <div class="syllabus-actions" style="display: flex; gap: 10px;">
-        <button class="btn-primary" style="padding: 8px 16px;">
-            {% if lang == 'en' %}Edit Syllabus{% else %}Sửa Đề Cương{% endif %}
-        </button>
-        <button class="btn-soft" style="padding: 8px 16px; border-radius: 6px;">
-            {% if lang == 'en' %}Print{% else %}In{% endif %}
-        </button>
-    </div>
-</div>
 
-{% set bc_paths = [
-    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
-    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
-    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
-    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Curricula' if lang == 'en' else 'CTĐT', 'url': '/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Subjects' if lang == 'en' else 'Môn học', 'url': '/subjects?curricula_id=' ~ curricula_id ~ '&major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
-    {'name': 'Syllabus' if lang == 'en' else 'Đề cương', 'url': None}
-] %}
 {{ components.breadcrumb(bc_paths) }}
 
 <div class="syllabus-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -167,8 +136,7 @@
             {% if lang == 'en' %}Restore/Cancel{% else %}Khôi phục / Hủy{% endif %}
         </button>
     </div>
-
-<div id="syllabus-content">
+</div>
     {% if detail %}
     <div class="syllabus-body">
         <div class="detail-section">
