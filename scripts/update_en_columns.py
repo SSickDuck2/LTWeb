@@ -447,6 +447,106 @@ def map_subject_row_from_link(csv_row: Dict[str, str]) -> Optional[Dict[str, Any
     }
 
 
+def _extract_subject_map_from_curriculum_attrs(attrs: Dict[str, Any]) -> Dict[int, Dict[str, Any]]:
+    result: Dict[int, Dict[str, Any]] = {}
+
+    links = attrs.get("curriculum_curriculum_subjects", {}).get("data", [])
+    if isinstance(links, dict):
+        links = [links]
+    if not isinstance(links, list):
+        return result
+
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+
+        link_attrs = link.get("attributes", {})
+        if not isinstance(link_attrs, dict):
+            continue
+
+        subject_data = link_attrs.get("curriculum_subject", {}).get("data")
+        if not isinstance(subject_data, dict):
+            continue
+
+        subject_id = to_int(subject_data.get("id"))
+        if subject_id is None:
+            continue
+
+        subject_attr = subject_data.get("attributes", {})
+        if not isinstance(subject_attr, dict):
+            subject_attr = {}
+
+        result[subject_id] = {
+            "data": subject_data,
+            "attributes": subject_attr,
+        }
+
+    return result
+
+
+def map_subject_rows_from_curriculum(csv_row: Dict[str, str]) -> list[Dict[str, Any]]:
+    vn = parse_json_text(csv_row.get("attribute_vn"))
+    en = parse_json_text(csv_row.get("attribute_en"))
+
+    vn_subject_map = _extract_subject_map_from_curriculum_attrs(vn)
+    en_subject_map = _extract_subject_map_from_curriculum_attrs(en)
+
+    all_subject_ids = set(vn_subject_map.keys()) | set(en_subject_map.keys())
+    if not all_subject_ids:
+        return []
+
+    rows: list[Dict[str, Any]] = []
+    for subject_id in all_subject_ids:
+        vn_subject = vn_subject_map.get(subject_id, {})
+        en_subject = en_subject_map.get(subject_id, {})
+
+        vn_attr = vn_subject.get("attributes", {}) if isinstance(vn_subject, dict) else {}
+        en_attr = en_subject.get("attributes", {}) if isinstance(en_subject, dict) else {}
+
+        vn_data = vn_subject.get("data", {}) if isinstance(vn_subject, dict) else {}
+        en_data = en_subject.get("data", {}) if isinstance(en_subject, dict) else {}
+
+        if not isinstance(vn_attr, dict):
+            vn_attr = {}
+        if not isinstance(en_attr, dict):
+            en_attr = {}
+
+        rows.append(
+            {
+                "id": subject_id,
+                "code": extract_code(vn_attr, "subjectCode", "code") or extract_code(en_attr, "subjectCode", "code"),
+                "slug": normalize_text(vn_attr.get("slug")) or normalize_text(en_attr.get("slug")),
+                "name": normalize_text(vn_attr.get("name")) or normalize_text(en_attr.get("name")),
+                "locale": normalize_text(vn_attr.get("locale")) or normalize_text(en_attr.get("locale")),
+                "short_name": normalize_text(pick(vn_attr.get("shortName"), vn_attr.get("short_name"), en_attr.get("shortName"), en_attr.get("short_name"))),
+                "description": normalize_text(vn_attr.get("description")) or normalize_text(en_attr.get("description")),
+                "credits": to_decimal(vn_attr.get("credits")) or to_decimal(en_attr.get("credits")),
+                "lecture_hours": to_int(pick(vn_attr.get("theoryLessons"), vn_attr.get("lectureHours"), vn_attr.get("lecture_hours"), en_attr.get("theoryLessons"), en_attr.get("lectureHours"), en_attr.get("lecture_hours"))),
+                "practice_hours": to_int(pick(vn_attr.get("practiceLessons"), vn_attr.get("practiceHours"), vn_attr.get("practice_hours"), en_attr.get("practiceLessons"), en_attr.get("practiceHours"), en_attr.get("practice_hours"))),
+                "created_at": normalize_text(pick(vn_attr.get("createdAt"), en_attr.get("createdAt"))),
+                "updated_at": normalize_text(pick(vn_attr.get("updatedAt"), en_attr.get("updatedAt"))),
+                "published_at": normalize_text(pick(vn_attr.get("publishedAt"), en_attr.get("publishedAt"))),
+                "raw_attributes": to_jsonb_obj(vn_data if isinstance(vn_data, dict) and vn_data else en_data if isinstance(en_data, dict) else {}),
+                "en_name": normalize_text(en_attr.get("name")),
+                "en_slug": normalize_text(en_attr.get("slug")),
+                "en_locale": normalize_text(en_attr.get("locale")),
+                "en_short_name": normalize_text(pick(en_attr.get("shortName"), en_attr.get("short_name"))),
+                "en_description": normalize_text(en_attr.get("description")),
+                "en_code": extract_code(en_attr, "subjectCode", "code"),
+                "en_raw_attributes": to_jsonb_obj(en_data if isinstance(en_data, dict) else {}),
+                "vn_name": normalize_text(vn_attr.get("name")),
+                "vn_slug": normalize_text(vn_attr.get("slug")),
+                "vn_locale": normalize_text(vn_attr.get("locale")),
+                "vn_short_name": normalize_text(pick(vn_attr.get("shortName"), vn_attr.get("short_name"))),
+                "vn_description": normalize_text(vn_attr.get("description")),
+                "vn_code": extract_code(vn_attr, "subjectCode", "code"),
+                "vn_raw_attributes": to_jsonb_obj(vn_data if isinstance(vn_data, dict) else {}),
+            }
+        )
+
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # SQL helpers
 # ---------------------------------------------------------------------------
@@ -540,7 +640,7 @@ def execute_batch_upsert(
 # Import jobs
 # ---------------------------------------------------------------------------
 
-MapFn = Callable[[Dict[str, str]], Optional[Dict[str, Any]]]
+MapFn = Callable[[Dict[str, str]], Optional[Dict[str, Any] | list[Dict[str, Any]]]]
 
 JOBS: Dict[str, Dict[str, Any]] = {
     "faculties": {
@@ -562,9 +662,9 @@ JOBS: Dict[str, Dict[str, Any]] = {
         "conflicts": [["id"]],
     },
     "subjects": {
-        "csv": "curriculum_subjects_rows.csv",
+        "csv": "curriculum_rows.csv",
         "table": "subjects_new",
-        "map_fn": map_subject_row_from_link,
+        "map_fn": map_subject_rows_from_curriculum,
         "conflicts": [["id"]],
     },
     "curriculum_subjects": {
@@ -584,14 +684,19 @@ def import_one_job(
     conflict_preferences: list[list[str]],
     batch_size: int,
 ) -> tuple[int, int, int]:
-    if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+    resolved_csv_path = csv_path
+    if not os.path.exists(resolved_csv_path):
+        candidate = os.path.join("data", csv_path)
+        if os.path.exists(candidate):
+            resolved_csv_path = candidate
+        else:
+            raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
     source_rows = 0
     mapped_rows = 0
     upserted_rows = 0
 
-    with open(csv_path, "r", encoding="utf-8", newline="") as file_obj:
+    with open(resolved_csv_path, "r", encoding="utf-8", newline="") as file_obj:
         reader = csv.DictReader(file_obj)
         batch: list[Dict[str, Any]] = []
 
@@ -600,8 +705,15 @@ def import_one_job(
             mapped = map_fn(raw_row)
             if mapped is None:
                 continue
-            mapped_rows += 1
-            batch.append(mapped)
+
+            if isinstance(mapped, list):
+                if not mapped:
+                    continue
+                mapped_rows += len(mapped)
+                batch.extend(mapped)
+            else:
+                mapped_rows += 1
+                batch.append(mapped)
 
             if len(batch) >= batch_size:
                 upserted_rows += execute_batch_upsert(cursor, table_name, batch, conflict_preferences)
