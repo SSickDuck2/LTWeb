@@ -326,6 +326,9 @@ def subjects_page(
         return f"<h1>Error: {str(e)}</h1>"
 
 
+import json
+import os
+
 @app.get("/syllabus", response_class=HTMLResponse)
 def syllabus_page(
     request: Request,
@@ -341,16 +344,30 @@ def syllabus_page(
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
+        
         subject = None
         if curricula_id_int is not None:
             subject = get_subject_from_curriculum(curricula_id_int, subject_id)
         if not subject:
             subject = get_single_item("subjects", subject_id)
+<<<<<<< Updated upstream
+=======
+        if subject:
+            subject = _apply_language(subject, lang)
+            
+>>>>>>> Stashed changes
         subject_name = subject.get("attributes", {}).get("name", "Unknown") if subject else "Unknown"
         curriculum_name = _resolve_name("curricula", curricula_id_int)
         major_name = _resolve_name("majors", major_id_int)
         faculty_name = _resolve_name("faculties", faculty_id_int)
         school_name = _resolve_name("schools", school_id_int)
+
+        syllabus_detail = None
+        try:
+            with open("detailSyllabus.json", "r", encoding="utf-8") as f:
+                syllabus_detail = json.load(f)
+        except Exception as e:
+            print(f"Không thể đọc file JSON: {e}")
 
         return templates.TemplateResponse(
             "syllabus.html",
@@ -366,6 +383,13 @@ def syllabus_page(
                 "faculty_name": faculty_name,
                 "school_id": school_id_int,
                 "school_name": school_name,
+<<<<<<< Updated upstream
+=======
+                "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
+                "detail": syllabus_detail, # <--- TRUYỀN DỮ LIỆU ĐỀ CƯƠNG VÀO ĐÂY
+>>>>>>> Stashed changes
             },
         )
     except Exception as e:

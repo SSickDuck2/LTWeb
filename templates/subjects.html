@@ -54,11 +54,11 @@
     <table>
         <thead>
             <tr>
-                <th>Mã Môn</th>
-                <th>Tên Môn Học</th>
-                <th>Tín Chỉ</th>
-                <th>Kiểu Môn</th>
-                <th>Hành Động</th>
+                <th>{{ 'Code' if lang == 'en' else 'Mã Môn' }}</th>
+                <th>{{ 'Subject Name' if lang == 'en' else 'Tên Môn Học' }}</th>
+                <th>{{ 'Credits' if lang == 'en' else 'Tín Chỉ' }}</th>
+                <th>{{ 'Type' if lang == 'en' else 'Kiểu Môn' }}</th>
+                <th>{{ 'Action' if lang == 'en' else 'Hành Động' }}</th>
             </tr>
         </thead>
         <tbody>
@@ -71,13 +71,17 @@
                     </a>
                 </td>
                 <td>
-                    <span class="badge">{{ subject.attributes.credits or '0' }} TC</span>
+                    <span class="badge">{{ subject.attributes.credits or '0' }} {{ 'credits' if lang == 'en' else 'TC' }}</span>
                 </td>
                 <td>
-                    <span class="badge">{{ subject.attributes.type or 'Thường' }}</span>
+                    <span class="badge">{{ subject.attributes.type or ('Regular' if lang == 'en' else 'Thường') }}</span>
                 </td>
                 <td>
+<<<<<<< Updated upstream
                     <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}{{ nav_qs }}" class="row-link">Xem → </a>
+=======
+                    <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">{{ 'View' if lang == 'en' else 'Xem' }} → </a>
+>>>>>>> Stashed changes
                 </td>
             </tr>
             {% endfor %}
@@ -101,7 +105,7 @@
     {% endif %}
     {% else %}
     <div class="empty-state">
-        <p>Không tìm thấy môn học nào cho chương trình này</p>
+        <p>{{ 'No subjects found for this curriculum' if lang == 'en' else 'Không tìm thấy môn học nào cho chương trình này' }}</p>
     </div>
     {% endif %}
 </div>

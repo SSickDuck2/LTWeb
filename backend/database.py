@@ -66,6 +66,220 @@ def check_db_connection() -> Dict[str, Any]:
     }
 
 
+def _serialize_school(item: School) -> Dict[str, Any]:
+    vn_name = _coalesce(item.vn_name, item.en_name)
+    vn_slug = _coalesce(item.vn_slug, item.en_slug)
+    vn_locale = _coalesce(item.vn_locale, item.en_locale)
+    vn_description = _coalesce(item.vn_description, item.en_description)
+    vn_code = _coalesce(item.vn_code, item.en_code)
+
+    en_name = _coalesce(item.en_name, item.vn_name)
+    en_slug = _coalesce(item.en_slug, item.vn_slug)
+    en_locale = _coalesce(item.en_locale, item.vn_locale)
+    en_description = _coalesce(item.en_description, item.vn_description)
+    en_code = _coalesce(item.en_code, item.vn_code)
+
+    vn = {
+        "name": vn_name,
+        "slug": vn_slug,
+        "locale": vn_locale,
+        "description": vn_description,
+        "schoolCode": vn_code,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    en = {
+        "name": en_name,
+        "slug": en_slug,
+        "locale": en_locale,
+        "description": en_description,
+        "schoolCode": en_code,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    return {
+        "id": item.id,
+        "attributes": vn,
+        "raw": _parse_json(_coalesce(item.vn_raw_attributes, item.en_raw_attributes)),
+        "attribute_en": en,
+        "raw_en": _parse_json(item.en_raw_attributes),
+    }
+
+
+def _serialize_faculty(item: Faculty) -> Dict[str, Any]:
+    vn = {
+        "name": item.vn_name,
+        "slug": item.vn_slug,
+        "locale": item.vn_locale,
+        "description": item.vn_description,
+        "facultyCode": item.vn_code,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    en = {
+        "name": item.en_name,
+        "slug": item.en_slug,
+        "locale": item.en_locale,
+        "description": item.en_description,
+        "facultyCode": item.en_code,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    return {
+        "id": item.id,
+        "attributes": vn,
+        "raw": _parse_json(item.vn_raw_attributes),
+        "attribute_en": en,
+        "raw_en": _parse_json(item.en_raw_attributes),
+    }
+
+
+def _serialize_major(item: Major) -> Dict[str, Any]:
+    vn_name = _coalesce(item.vn_name, item.name)
+    vn_slug = _coalesce(item.vn_slug, item.slug)
+    vn_locale = _coalesce(item.vn_locale, item.locale)
+    vn_description = _coalesce(item.vn_description, item.description)
+    vn_code = _coalesce(item.vn_faculty_code, item.faculty_code)
+
+    en_name = _coalesce(item.en_name, item.name)
+    en_slug = _coalesce(item.en_slug, item.slug)
+    en_locale = _coalesce(item.en_locale, item.locale)
+    en_description = _coalesce(item.en_description, item.description)
+    en_code = _coalesce(item.en_faculty_code, item.faculty_code)
+
+    vn = {
+        "name": vn_name,
+        "slug": vn_slug,
+        "locale": vn_locale,
+        "description": vn_description,
+        "majorCode": vn_code,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    en = {
+        "name": en_name,
+        "slug": en_slug,
+        "locale": en_locale,
+        "description": en_description,
+        "majorCode": en_code,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    return {
+        "id": item.id,
+        "attributes": vn,
+        "raw": _parse_json(_coalesce(item.vn_raw_attributes, item.raw_attributes)),
+        "attribute_en": en,
+        "raw_en": _parse_json(item.en_raw_attributes),
+    }
+
+
+def _serialize_curriculum(item: Curriculum) -> Dict[str, Any]:
+    vn_name = _coalesce(item.vn_name, item.name)
+    vn_slug = _coalesce(item.vn_slug, item.slug)
+    vn_locale = _coalesce(item.vn_locale, item.locale)
+    vn_description = _coalesce(item.vn_description, item.description)
+    vn_code = _coalesce(item.vn_code, item.code)
+
+    en_name = _coalesce(item.en_name, item.name)
+    en_slug = _coalesce(item.en_slug, item.slug)
+    en_locale = _coalesce(item.en_locale, item.locale)
+    en_description = _coalesce(item.en_description, item.description)
+    en_code = _coalesce(item.en_code, item.code)
+
+    vn = {
+        "name": vn_name,
+        "slug": vn_slug,
+        "locale": vn_locale,
+        "description": vn_description,
+        "curriculumCode": vn_code,
+        "credits": float(item.credits) if item.credits is not None else None,
+        "effectiveYear": item.effective_year,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    en = {
+        "name": en_name,
+        "slug": en_slug,
+        "locale": en_locale,
+        "description": en_description,
+        "curriculumCode": en_code,
+        "credits": float(item.credits) if item.credits is not None else None,
+        "effectiveYear": item.effective_year,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    return {
+        "id": item.id,
+        "attributes": vn,
+        "raw": _parse_json(_coalesce(item.vn_raw_attributes, item.raw_attributes)),
+        "attribute_en": en,
+        "raw_en": _parse_json(item.en_raw_attributes),
+    }
+
+
+def _serialize_subject(item: Subject) -> Dict[str, Any]:
+    vn_name = _coalesce(item.vn_name, item.name if item.locale == "vi" else None)
+    vn_slug = _coalesce(item.vn_slug, item.slug if item.locale == "vi" else None)
+    vn_locale = _coalesce(item.vn_locale, item.locale if item.locale == "vi" else None)
+    vn_description = _coalesce(item.vn_description, item.description if item.locale == "vi" else None)
+    vn_short_name = _coalesce(item.vn_short_name, item.short_name if item.locale == "vi" else None)
+    vn_code = _coalesce(item.vn_code, item.code if item.locale == "vi" else None, item.code)
+
+    en_name = _coalesce(item.en_name, item.name if item.locale == "en" else None)
+    en_slug = _coalesce(item.en_slug, item.slug if item.locale == "en" else None)
+    en_locale = _coalesce(item.en_locale, item.locale if item.locale == "en" else None)
+    en_description = _coalesce(item.en_description, item.description if item.locale == "en" else None)
+    en_short_name = _coalesce(item.en_short_name, item.short_name if item.locale == "en" else None)
+    en_code = _coalesce(item.en_code, item.code if item.locale == "en" else None, item.code)
+
+    vn = {
+        "name": vn_name,
+        "slug": vn_slug,
+        "locale": vn_locale,
+        "shortName": vn_short_name,
+        "description": vn_description,
+        "subjectCode": vn_code,
+        "subCode": vn_code,
+        "credits": float(item.credits) if item.credits is not None else None,
+        "theoryLessons": item.lecture_hours,
+        "practiceLessons": item.practice_hours,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    en = {
+        "name": en_name,
+        "slug": en_slug,
+        "locale": en_locale,
+        "shortName": en_short_name,
+        "description": en_description,
+        "subjectCode": en_code,
+        "subCode": en_code,
+        "credits": float(item.credits) if item.credits is not None else None,
+        "theoryLessons": item.lecture_hours,
+        "practiceLessons": item.practice_hours,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+        "publishedAt": item.published_at.isoformat() if item.published_at else None,
+    }
+    return {
+        "id": item.id,
+        "attributes": vn,
+        "raw": _parse_json(_coalesce(item.vn_raw_attributes, item.raw_attributes)),
+        "attribute_en": en,
+        "raw_en": _parse_json(item.en_raw_attributes),
+    }
+
+
 def _serialize_item(model_instance: Any) -> Dict[str, Any]:
     return {
         "id": model_instance.id,
@@ -91,7 +305,30 @@ def _merge_subject_attributes(base_attributes: Dict[str, Any], link_attributes: 
     return merged
 
 
-@contextmanager
+def _build_subject_locale_map(db: Session, subjects: List[Subject]) -> Dict[str, Dict[str, Subject]]:
+    codes = sorted({s.code for s in subjects if getattr(s, "code", None)})
+    if not codes:
+        return {}
+
+    rows = db.execute(
+        select(Subject)
+        .where(Subject.code.in_(codes))
+        .where(func.lower(func.coalesce(Subject.locale, "")) .in_(["vi", "en"]))
+    ).scalars().all()
+
+    locale_map: Dict[str, Dict[str, Subject]] = {}
+    for subject in rows:
+        code = subject.code
+        if not code:
+            continue
+        locale = (subject.locale or "").lower()
+        if locale not in {"vi", "en"}:
+            continue
+        locale_map.setdefault(code, {})[locale] = subject
+
+    return locale_map
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
@@ -148,12 +385,28 @@ def get_subjects_by_curriculum(
 
         total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
         rows = db.execute(query.order_by(Subject.id).offset(offset).limit(page_size)).all()
+        locale_map = _build_subject_locale_map(db, [subject for subject, _ in rows])
 
         data = []
         for subject, link_attributes_text in rows:
             base_item = _serialize_item(subject)
-            link_attributes = _parse_json(link_attributes_text)
-            base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link_attributes)
+
+            by_code = locale_map.get(subject.code or "", {})
+            vi_row = by_code.get("vi")
+            en_row = by_code.get("en")
+
+            if vi_row is not None:
+                vi_serialized = _serialize_item(vi_row)
+                base_item["attributes"] = vi_serialized.get("attributes", base_item.get("attributes", {}))
+                base_item["raw"] = vi_serialized.get("raw", base_item.get("raw", {}))
+
+            if en_row is not None:
+                en_serialized = _serialize_item(en_row)
+                base_item["attribute_en"] = en_serialized.get("attribute_en", base_item.get("attribute_en", {}))
+                base_item["raw_en"] = en_serialized.get("raw_en", base_item.get("raw_en", {}))
+
+            base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link, "vi")
+            base_item["attribute_en"] = _merge_subject_attributes(base_item["attribute_en"], link, "en")
             data.append(base_item)
 
         return {
@@ -179,8 +432,24 @@ def get_subject_from_curriculum(curricula_id: int, subject_id: int) -> Optional[
 
         subject, link_attributes_text = row
         base_item = _serialize_item(subject)
-        link_attributes = _parse_json(link_attributes_text)
-        base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link_attributes)
+
+        locale_map = _build_subject_locale_map(db, [subject])
+        by_code = locale_map.get(subject.code or "", {})
+        vi_row = by_code.get("vi")
+        en_row = by_code.get("en")
+
+        if vi_row is not None:
+            vi_serialized = _serialize_item(vi_row)
+            base_item["attributes"] = vi_serialized.get("attributes", base_item.get("attributes", {}))
+            base_item["raw"] = vi_serialized.get("raw", base_item.get("raw", {}))
+
+        if en_row is not None:
+            en_serialized = _serialize_item(en_row)
+            base_item["attribute_en"] = en_serialized.get("attribute_en", base_item.get("attribute_en", {}))
+            base_item["raw_en"] = en_serialized.get("raw_en", base_item.get("raw_en", {}))
+
+        base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link, "vi")
+        base_item["attribute_en"] = _merge_subject_attributes(base_item["attribute_en"], link, "en")
         return base_item
 
 
@@ -423,12 +692,16 @@ def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int =
                 suggestions.append({"name": name, "url": f"/majors?faculty_id={item_id}"})
                 
         elif scope == "schools":
-            rows = db.execute(
-                select(School.id, School.attribute_vn['name'].as_string())
-                .where(School.attribute_vn['name'].as_string().ilike(normalized_search))
-                .limit(limit_results)
-            ).all()
+            query = select(School.id, func.coalesce(School.vn_name, School.en_name))
+            query = query.where(
+                or_(
+                    School.vn_name.ilike(normalized_search),
+                    School.en_name.ilike(normalized_search),
+                )
+            ).limit(limit_results)
+            rows = db.execute(query).all()
             for item_id, name in rows:
                 suggestions.append({"name": name, "url": f"/faculties?school_id={item_id}"})
-
+    finally:
+        db.close()
     return suggestions
