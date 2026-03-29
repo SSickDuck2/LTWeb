@@ -4,28 +4,10 @@ services:
   api:
     build: .
     container_name: neu-curriculum-api
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     environment:
       # Thay thế bằng URL thật. Ví dụ với Supabase:
       # - DATABASE_URL=postgresql://postgres.xxxxxx:your_password@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
       - DATABASE_URL=postgresql://postgres.gvorkioeezskxarenfui:Y8Hp5KAPBrQlZNDH@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
     restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: caddy-proxy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - api
-    restart: unless-stopped
-
-volumes:
-  caddy_data:
-  caddy_config:
