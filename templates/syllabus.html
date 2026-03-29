@@ -5,32 +5,110 @@
 {% block title %}{% if lang == 'en' %}Syllabus{% else %}Đề cương Môn học{% endif %} - NEU Curriculum{% endblock %}
 
 {% block extra_css %}
-/* CSS cho các nút (Hủy bỏ, Lưu, In) của bạn giữ nguyên ở đây */
+/* CSS CHO NÚT BẤM */
 .btn-danger {
     border: 1px solid #c8102e !important; 
     background-color: #ffffff !important; 
     color: #c8102e !important;            
-    border-radius: 8px;
-    padding: 9px 14px;
+    border-radius: 6px;
+    padding: 8px 16px;
     font-size: 14px;
     cursor: pointer;
     font-weight: 600;
     transition: background-color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
-.btn-danger:hover {
-    background-color: #fcece9 !important; 
-}
-.edit-actions-bottom .btn-primary {
+.btn-danger:hover { background-color: #fcece9 !important; }
+
+.btn-success {
     background-color: #0b8a43 !important; 
     color: #ffffff !important; 
+    border: none !important;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
+.btn-success:hover { background-color: #097337 !important; }
+
 .syllabus-actions .btn-soft {
     background-color: #00529c !important; 
     color: #ffffff !important;            
     border: none !important;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
-.syllabus-actions .btn-soft:hover {
-    background-color: #003d75 !important;
+.syllabus-actions .btn-soft:hover { background-color: #003d75 !important; }
+
+/* GIAO DIỆN CHUẨN NEU COURSES */
+.syllabus-body {
+    background: #ffffff;
+    padding: 30px 40px; 
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.detail-section { margin-bottom: 40px; }
+.detail-section h3 { 
+    color: #00529c; 
+    margin-top: 0; 
+    margin-bottom: 20px; 
+    font-size: 16px; 
+    font-weight: 700;
+    text-transform: uppercase; 
+    border-bottom: 2px solid #00529c; 
+    padding-bottom: 10px; 
+}
+
+.info-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.info-table td { padding: 12px 15px; vertical-align: top; border-bottom: 1px dotted #ccc; }
+.info-table td.info-label { font-weight: 600; color: #333; width: 25%; }
+
+.syll-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14.5px; }
+.syll-table th, .syll-table td { border: 1px solid #ddd; padding: 14px 16px; text-align: left; vertical-align: top; line-height: 1.6; }
+.syll-table th { background-color: #f5f5f5; color: #333; font-weight: 600; }
+.syll-table tr:hover { background-color: #f9fbfc; }
+
+.syllabus-text { line-height: 1.7; color: #333; font-size: 15px; text-align: justify; }
+
+/* HIỆU ỨNG KHI CHỈNH SỬA (EDIT MODE) */
+.editable-active {
+    border: 1px dashed #00529c;
+    background-color: #f8fafc;
+    border-radius: 4px;
+    padding: 2px 6px;
+    outline: none;
+    transition: all 0.2s;
+}
+.editable-active:focus {
+    background-color: #ffffff;
+    border-style: solid;
+    box-shadow: 0 0 0 3px rgba(0,82,156,0.1);
+}
+
+/* CSS CHUYÊN DỤNG CHO VIỆC IN (CTRL+P) */
+@media print {
+    .neu-navbar, .breadcrumb, .syllabus-actions, .neu-footer { display: none !important; }
+    body { background: white !important; margin: 0; padding: 0; }
+    .main-content-wrapper { padding: 0 !important; }
+    .page-card { box-shadow: none !important; border: none !important; padding: 0 !important; }
+    .syllabus-body { border: none !important; box-shadow: none !important; padding: 0 !important; }
+    .syll-table th { background-color: #f5f5f5 !important; -webkit-print-color-adjust: exact; }
+    .detail-section h3 { color: #000 !important; border-bottom: 2px solid #000 !important; }
 }
 {% endblock %}
 
@@ -52,16 +130,232 @@
     
     <div class="syllabus-actions" style="display: flex; gap: 10px;">
         <button class="btn-primary" style="padding: 8px 16px;">
-            ✏️ {% if lang == 'en' %}Edit Syllabus{% else %}Sửa Đề Cương{% endif %}
+            {% if lang == 'en' %}Edit Syllabus{% else %}Sửa Đề Cương{% endif %}
         </button>
         <button class="btn-soft" style="padding: 8px 16px; border-radius: 6px;">
-            🖨️ {% if lang == 'en' %}Print{% else %}In{% endif %}
+            {% if lang == 'en' %}Print{% else %}In{% endif %}
         </button>
     </div>
 </div>
 
-<div class="syllabus-body" style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
-    <p>Nội dung đề cương đang được cập nhật...</p>
+{% set bc_paths = [
+    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
+    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
+    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Curricula' if lang == 'en' else 'CTĐT', 'url': '/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Subjects' if lang == 'en' else 'Môn học', 'url': '/subjects?curricula_id=' ~ curricula_id ~ '&major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Syllabus' if lang == 'en' else 'Đề cương', 'url': None}
+] %}
+{{ components.breadcrumb(bc_paths) }}
+
+<div class="syllabus-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <h2 style="color: #00529c; margin: 0;">{% if lang == 'en' %}Syllabus Details{% else %}Chi tiết Đề cương{% endif %}</h2>
+    
+    <div class="syllabus-actions" style="display: flex; gap: 10px;">
+        <button id="btn-edit" class="btn-soft" onclick="enterEditMode()">
+            {% if lang == 'en' %}Edit Syllabus{% else %}Sửa Đề Cương{% endif %}
+        </button>
+        <button id="btn-print" class="btn-soft" onclick="window.print()">
+            {% if lang == 'en' %}Print{% else %}In{% endif %}
+        </button>
+
+        <button id="btn-save" class="btn-success" onclick="saveChanges()" style="display: none;">
+            {% if lang == 'en' %}Save{% else %}Lưu thay đổi{% endif %}
+        </button>
+        <button id="btn-cancel" class="btn-danger" onclick="restoreChanges()" style="display: none;">
+            {% if lang == 'en' %}Restore/Cancel{% else %}Khôi phục / Hủy{% endif %}
+        </button>
+    </div>
+
+<div id="syllabus-content">
+    {% if detail %}
+    <div class="syllabus-body">
+        <div class="detail-section">
+            <h3>1. {% if lang == 'en' %}General Information{% else %}Thông tin chung{% endif %}</h3>
+            <table class="info-table">
+                <tr>
+                    <td class="info-label">{% if lang == 'en' %}Course Code:{% else %}Mã học phần:{% endif %}</td>
+                    <td><strong>{{ detail.course_code }}</strong></td>
+                </tr>
+                <tr>
+                    <td class="info-label">{% if lang == 'en' %}Course Title:{% else %}Tên học phần:{% endif %}</td>
+                    <td class="edit-target"><strong>{% if lang == 'en' %}{{ detail.course_title_en }}{% else %}{{ detail.course_title_vi }}{% endif %}</strong></td>
+                </tr>
+                <tr>
+                    <td class="info-label">{% if lang == 'en' %}Credits:{% else %}Số tín chỉ:{% endif %}</td>
+                    <td class="edit-target">{{ detail.number_of_credits }} ({% if lang == 'en' %}Theory{% else %}Lý thuyết{% endif %}: {{ detail.contact_hours }}h, {% if lang == 'en' %}Self-study{% else %}Tự học{% endif %}: {{ detail.self_study_hours }}h)</td>
+                </tr>
+                <tr>
+                    <td class="info-label">{% if lang == 'en' %}Department:{% else %}Đơn vị phụ trách:{% endif %}</td>
+                    <td class="edit-target">{% if lang == 'en' %}{{ detail.department_name_en }}{% else %}{{ detail.department_name_vi }}{% endif %}</td>
+                </tr>
+                <tr>
+                    <td class="info-label" style="border-bottom: none;">{% if lang == 'en' %}Prerequisites:{% else %}Học phần tiên quyết:{% endif %}</td>
+                    <td class="edit-target" style="border-bottom: none;">{% if lang == 'en' %}{{ detail.prerequisite_courses_en }}{% else %}{{ detail.prerequisite_courses_vi }}{% endif %}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="detail-section">
+            <h3>2. {% if lang == 'en' %}Course Description{% else %}Mô tả học phần{% endif %}</h3>
+            <div class="syllabus-text edit-target">
+                {% if lang == 'en' %}{{ detail.course_description_en }}{% else %}{{ detail.course_description_vi }}{% endif %}
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>3. {% if lang == 'en' %}Course Learning Outcomes (CLOs){% else %}Chuẩn đầu ra học phần (CLO){% endif %}</h3>
+            <table class="syll-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%; text-align: center;">CLO</th>
+                        <th style="width: 58%;">{% if lang == 'en' %}Description{% else %}Mô tả chuẩn đầu ra{% endif %}</th>
+                        <th style="width: 15%; text-align: center;">{% if lang == 'en' %}Goal Mapping{% else %}Mục tiêu{% endif %}</th>
+                        <th style="width: 15%; text-align: center;">{% if lang == 'en' %}PLO Mapping{% else %}CĐR Ngành{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for clo in detail.learning_outcomes %}
+                    <tr>
+                        <td style="text-align: center;"><strong>{{ clo.clo_code }}</strong></td>
+                        <td class="edit-target">{% if lang == 'en' %}{{ clo.clo_description_en }}{% else %}{{ clo.clo_description_vi }}{% endif %}</td>
+                        <td class="edit-target" style="text-align: center;">{{ clo.goal_code }}</td>
+                        <td style="text-align: center;"><span class="badge">{{ clo.plo_code }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="detail-section">
+            <h3>4. {% if lang == 'en' %}Assessments{% else %}Đánh giá học phần{% endif %}</h3>
+            <table class="syll-table">
+                <thead>
+                    <tr>
+                        <th>{% if lang == 'en' %}Method{% else %}Phương pháp đánh giá{% endif %}</th>
+                        <th>{% if lang == 'en' %}Time{% else %}Thời điểm{% endif %}</th>
+                        <th>{% if lang == 'en' %}CLOs Assessed{% else %}Đánh giá CLO{% endif %}</th>
+                        <th style="text-align: center;">{% if lang == 'en' %}Weight{% else %}Tỷ trọng{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for asm in detail.assessments %}
+                    <tr>
+                        <td class="edit-target"><strong>{% if lang == 'en' %}{{ asm.assessment_method_en }}{% else %}{{ asm.assessment_method_vi }}{% endif %}</strong></td>
+                        <td class="edit-target">{% if lang == 'en' %}{{ asm.time_text_en }}{% else %}{{ asm.time_text_vi }}{% endif %}</td>
+                        <td class="edit-target">{{ asm.clo_text_vi }}</td>
+                        <td class="edit-target" style="text-align: center;"><strong>{{ asm.weight_percent }}%</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="detail-section">
+            <h3>5. {% if lang == 'en' %}Teaching Plan{% else %}Kế hoạch giảng dạy chi tiết{% endif %}</h3>
+            <table class="syll-table">
+                <thead>
+                    <tr>
+                        <th style="width: 8%; text-align: center;">{% if lang == 'en' %}Week{% else %}Tuần{% endif %}</th>
+                        <th style="width: 40%;">{% if lang == 'en' %}Content{% else %}Nội dung chi tiết{% endif %}</th>
+                        <th style="width: 32%;">{% if lang == 'en' %}Activities{% else %}Hoạt động Dạy & Học{% endif %}</th>
+                        <th style="width: 20%;">{% if lang == 'en' %}Assessment{% else %}Đánh giá{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in detail.teaching_plans %}
+                    <tr>
+                        <td style="text-align: center;"><strong>{{ plan.week_no }}</strong></td>
+                        <td class="edit-target">{% if lang == 'en' %}{{ plan.detail_content_en }}{% else %}{{ plan.detail_content_vi }}{% endif %}</td>
+                        <td class="edit-target">{% if lang == 'en' %}{{ plan.activity_content_en }}{% else %}{{ plan.activity_content_vi }}{% endif %}</td>
+                        <td>
+                            <span class="edit-target" style="display: block; margin-bottom: 6px;">{% if lang == 'en' %}{{ plan.assessment_content_en }}{% else %}{{ plan.assessment_content_vi }}{% endif %}</span>
+                            <span class="badge" style="background: #eef2f6; color: #475569; border: 1px solid #cbd5e1;">{{ plan.clo_content_vi }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="detail-section" style="margin-bottom: 0;">
+            <h3>6. {% if lang == 'en' %}Learning Resources{% else %}Tài liệu học tập{% endif %}</h3>
+            <ul class="syllabus-text" style="padding-left: 20px;">
+                {% for res in detail.learning_resources %}
+                <li class="edit-target" style="margin-bottom: 8px;">
+                    <strong>{% if lang == 'en' %}{{ res.title_en }}{% else %}{{ res.title_vi }}{% endif %}</strong> - 
+                    {% if lang == 'en' %}{{ res.author_en }}{% else %}{{ res.author_vi }}{% endif %} 
+                    ({{ res.publish_year }}). <em>{% if lang == 'en' %}{{ res.publisher_en }}{% else %}{{ res.publisher_vi }}{% endif %}</em>.
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% else %}
+    <div class="syllabus-body" style="background: #ffffff; padding: 60px 20px; text-align: center; border-radius: 4px; border: 1px solid #ddd; color: #64748b;">
+        <p style="font-size: 16px;">{% if lang == 'en' %}Syllabus content is not available yet.{% else %}Nội dung đề cương của môn học này chưa được khởi tạo hoặc đang cập nhật...{% endif %}</p>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+    let originalHTML = ""; // Biến để lưu trữ HTML gốc trước khi sửa
+
+    function enterEditMode() {
+        const contentDiv = document.getElementById('syllabus-content');
+        
+        // 1. Lưu lại toàn bộ HTML hiện tại vào bộ nhớ tạm để có thể khôi phục
+        originalHTML = contentDiv.innerHTML;
+
+        // 2. Tìm tất cả các vùng có class 'edit-target' và cho phép gõ chữ
+        const editableElements = document.querySelectorAll('.edit-target');
+        editableElements.forEach(el => {
+            el.setAttribute('contenteditable', 'true');
+            el.classList.add('editable-active');
+        });
+
+        // 3. Ẩn nút Edit/Print, Hiện nút Save/Cancel
+        document.getElementById('btn-edit').style.display = 'none';
+        document.getElementById('btn-print').style.display = 'none';
+        document.getElementById('btn-save').style.display = 'inline-flex';
+        document.getElementById('btn-cancel').style.display = 'inline-flex';
+        
+        // Cảnh báo nhẹ cho người dùng
+        // alert("Bạn đang ở chế độ chỉnh sửa. Hãy click trực tiếp vào văn bản để sửa đổi.");
+    }
+
+    function restoreChanges() {
+        if (confirm("{% if lang == 'en' %}Are you sure you want to discard all changes?{% else %}Bạn có chắc chắn muốn hủy bỏ mọi thay đổi và khôi phục về ban đầu?{% endif %}")) {
+            // 1. Phục hồi lại HTML gốc
+            document.getElementById('syllabus-content').innerHTML = originalHTML;
+            
+            // 2. Thoát chế độ sửa
+            exitEditMode();
+        }
+    }
+
+    function saveChanges() {
+        // Thực tế ở đây bạn sẽ dùng fetch() để lấy innerText của các ô và gửi về backend api.py
+        // Tạm thời hiển thị thông báo thành công và khóa form lại
+        alert("{% if lang == 'en' %}Changes saved successfully!{% else %}Đã lưu các thay đổi thành công!{% endif %}");
+        
+        // Cập nhật lại HTML gốc bằng HTML mới vừa sửa để nếu bấm sửa tiếp thì không bị mất
+        const editableElements = document.querySelectorAll('.edit-target');
+        editableElements.forEach(el => {
+            el.setAttribute('contenteditable', 'false');
+            el.classList.remove('editable-active');
+        });
+
+        exitEditMode();
+    }
+
+    function exitEditMode() {
+        document.getElementById('btn-edit').style.display = 'inline-flex';
+        document.getElementById('btn-print').style.display = 'inline-flex';
+        document.getElementById('btn-save').style.display = 'none';
+        document.getElementById('btn-cancel').style.display = 'none';
+    }
+</script>
 
 {% endblock %}
