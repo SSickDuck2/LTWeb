@@ -77,11 +77,7 @@
                     <span class="badge">{{ subject.attributes.type or ('Regular' if lang == 'en' else 'Thường') }}</span>
                 </td>
                 <td>
-<<<<<<< Updated upstream
-                    <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}{{ nav_qs }}" class="row-link">Xem → </a>
-=======
                     <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">{{ 'View' if lang == 'en' else 'Xem' }} → </a>
->>>>>>> Stashed changes
                 </td>
             </tr>
             {% endfor %}

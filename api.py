@@ -350,12 +350,8 @@ def syllabus_page(
             subject = get_subject_from_curriculum(curricula_id_int, subject_id)
         if not subject:
             subject = get_single_item("subjects", subject_id)
-<<<<<<< Updated upstream
-=======
         if subject:
             subject = _apply_language(subject, lang)
-            
->>>>>>> Stashed changes
         subject_name = subject.get("attributes", {}).get("name", "Unknown") if subject else "Unknown"
         curriculum_name = _resolve_name("curricula", curricula_id_int)
         major_name = _resolve_name("majors", major_id_int)
@@ -383,13 +379,9 @@ def syllabus_page(
                 "faculty_name": faculty_name,
                 "school_id": school_id_int,
                 "school_name": school_name,
-<<<<<<< Updated upstream
-=======
                 "lang": lang,
                 "authenticated": True,
                 "teacher_code": teacher_code,
-                "detail": syllabus_detail, # <--- TRUYỀN DỮ LIỆU ĐỀ CƯƠNG VÀO ĐÂY
->>>>>>> Stashed changes
             },
         )
     except Exception as e:

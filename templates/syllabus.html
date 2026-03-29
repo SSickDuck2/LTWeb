@@ -1,8 +1,5 @@
 {% extends "base.html" %}
 
-<<<<<<< Updated upstream
-{% block title %}Chi Tiết Môn Học - NEU Curriculum{% endblock %}
-=======
 {% import "UI/components.html" as components with context %}
 
 {% block title %}{% if lang == 'en' %}Syllabus{% else %}Đề cương Môn học{% endif %} - NEU Curriculum{% endblock %}
@@ -114,7 +111,6 @@
     .detail-section h3 { color: #000 !important; border-bottom: 2px solid #000 !important; }
 }
 {% endblock %}
->>>>>>> Stashed changes
 
 {% block main_content %}
 <div class="breadcrumb">
@@ -145,51 +141,6 @@
             </div>
         </div>
 
-<<<<<<< Updated upstream
-        {% if subject.attributes.description %}
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="color: #333; margin-bottom: 10px;">Mô Tả</h3>
-            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.description }}</p>
-        </div>
-        {% endif %}
-
-        {% if subject.attributes.objectives %}
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="color: #333; margin-bottom: 10px;">Mục Tiêu Học Tập</h3>
-            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.objectives }}</p>
-        </div>
-        {% endif %}
-
-        {% if subject.attributes.content %}
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="color: #333; margin-bottom: 10px;">Nội Dung</h3>
-            <p style="color: #555; line-height: 1.6;">{{ subject.attributes.content }}</p>
-        </div>
-        {% endif %}
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-            {% if subject.attributes.prerequisite %}
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">KIẾN THỨC TIÊN QUYẾT</p>
-                <p style="color: #333; font-weight: 500;">{{ subject.attributes.prerequisite }}</p>
-            </div>
-            {% endif %}
-
-            {% if subject.attributes.assessment %}
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">ĐÁNH GIÁ</p>
-                <p style="color: #333; font-weight: 500;">{{ subject.attributes.assessment }}</p>
-            </div>
-            {% endif %}
-
-            {% if subject.attributes.textbook %}
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">GIÁO TRÌNH</p>
-                <p style="color: #333; font-weight: 500;">{{ subject.attributes.textbook }}</p>
-            </div>
-            {% endif %}
-        </div>
-=======
 {% set bc_paths = [
     {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
     {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
@@ -218,21 +169,8 @@
         <button id="btn-cancel" class="btn-danger" onclick="restoreChanges()" style="display: none;">
             {% if lang == 'en' %}Restore/Cancel{% else %}Khôi phục / Hủy{% endif %}
         </button>
->>>>>>> Stashed changes
     </div>
 
-<<<<<<< Updated upstream
-    <div style="margin-top: 30px; text-align: center;">
-        <a href="/subjects?curricula_id={{ curricula_id }}" style="padding: 10px 30px; background: #667eea; color: white; border-radius: 4px; text-decoration: none; font-weight: 500;">← Quay lại danh sách môn học</a>
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <p>Không tìm thấy thông tin môn học</p>
-    </div>
-    {% endif %}
-</div>
-{% endblock %}
-=======
 <div id="syllabus-content">
     {% if detail %}
     <div class="syllabus-body">
@@ -424,4 +362,3 @@
 </script>
 
 {% endblock %}
->>>>>>> Stashed changes
