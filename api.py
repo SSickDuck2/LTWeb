@@ -31,6 +31,27 @@ app.add_middleware(SessionMiddleware, secret_key="neu-curriculum-secret-key-2024
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+
+def _template_response(
+    name: str,
+    request: Request,
+    context: Optional[Dict[str, Any]] = None,
+    status_code: int = 200,
+):
+    payload = dict(context or {})
+    payload.setdefault("request", request)
+    try:
+        # Starlette/FastAPI newer signature
+        return templates.TemplateResponse(
+            request=request,
+            name=name,
+            context=payload,
+            status_code=status_code,
+        )
+    except TypeError:
+        # Backward compatibility with older signature
+        return templates.TemplateResponse(name, payload, status_code=status_code)
+
 # API routes
 app.include_router(schools_router, prefix="/api")
 app.include_router(faculties_router, prefix="/api")
@@ -85,10 +106,10 @@ def login_page(request: Request):
     lang = _get_lang_from_request(request)
     error = request.query_params.get("error", "")
     
-    return templates.TemplateResponse(
+    return _template_response(
         "login.html",
+        request,
         {
-            "request": request,
             "lang": lang,
             "error": error,
         },
@@ -102,10 +123,10 @@ def login(request: Request, teacher_code: str = Form(...), password: str = Form(
     if not _verify_teacher_password(teacher_code, password):
         lang = _get_lang_from_request(request)
         error_msg = "Mã giảng viên hoặc mật khẩu không chính xác" if lang == "vi" else "Invalid Teacher ID or password"
-        return templates.TemplateResponse(
+        return _template_response(
             "login.html",
+            request,
             {
-                "request": request,
                 "lang": lang,
                 "error": error_msg,
             },
@@ -238,10 +259,10 @@ def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Q
         data = get_table_data("schools", page=page, page_size=10, search=search)
         schools = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "schools.html",
+            request,
             {
-                "request": request,
                 "schools": schools,
                 "meta": _build_meta(data, 10),
                 "search": search,
@@ -278,10 +299,10 @@ def faculties_page(
         )
         faculties = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "faculties.html",
+            request,
             {
-                "request": request,
                 "faculties": faculties,
                 "meta": _build_meta(data, 10),
                 "school_id": school_id,
@@ -323,10 +344,10 @@ def majors_page(
         )
         majors = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "majors.html",
+            request,
             {
-                "request": request,
                 "majors": majors,
                 "meta": _build_meta(data, 10),
                 "faculty_id": faculty_id,
@@ -373,10 +394,10 @@ def curricula_page(
         )
         curricula = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "curricula.html",
+            request,
             {
-                "request": request,
                 "curricula": curricula,
                 "meta": _build_meta(data, 10),
                 "major_id": major_id,
@@ -431,10 +452,10 @@ def subjects_page(
         )
         subjects = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "subjects.html",
+            request,
             {
-                "request": request,
                 "subjects": subjects,
                 "meta": _build_meta(data, current_page_size),
                 "curricula_id": curricula_id,
@@ -488,10 +509,10 @@ def syllabus_page(
         faculty_name = _resolve_name("faculties", faculty_id_int, lang)
         school_name = _resolve_name("schools", school_id_int, lang)
 
-        return templates.TemplateResponse(
+        return _template_response(
             "syllabus.html",
+            request,
             {
-                "request": request,
                 "subject": subject,
                 "subject_name": subject_name,
                 "curricula_id": curricula_id_int,
@@ -555,7 +576,7 @@ def get_siblings_api(
 @app.get("/login")
 def login_page(request: Request):
     """Chỉ làm nhiệm vụ hiển thị trang login.html cho người dùng nhập liệu"""
-    return templates.TemplateResponse("login.html", {"request": request})
+    return _template_response("login.html", request)
 
 
 @app.post("/login")
@@ -572,10 +593,13 @@ def login_process(
     
     # 2. Kiểm tra mật khẩu (Tạm thời so sánh thẳng)
     if not teacher or not pwd_context.verify(password, teacher.password_hash):
-        return templates.TemplateResponse("login.html", {
-            "request": request, 
-            "error": "Sai mã giảng viên hoặc mật khẩu"
-        })
+        return _template_response(
+            "login.html",
+            request,
+            {
+                "error": "Sai mã giảng viên hoặc mật khẩu",
+            },
+        )
 
     # 3. Tạo cookie với dữ liệu ĐỘNG
     response = RedirectResponse(url="/", status_code=302)
