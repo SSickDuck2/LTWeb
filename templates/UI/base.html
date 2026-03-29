@@ -32,8 +32,7 @@
                 <a href="javascript:void(0);" onclick="setLanguage('vi')" class="nav-item {% if lang == 'vi' or not lang %}active{% endif %}">Tiếng Việt</a>
                 <a href="javascript:void(0);" onclick="setLanguage('en')" class="nav-item {% if lang == 'en' %}active{% endif %}">English</a>
                 
-                {% set user_token = request.cookies.get('user_token') %}
-                {% if user_token %}
+                {% if authenticated %}
                     <div class="bc-dropdown user-dropdown" style="margin-left: 10px;">
                         <button class="nav-btn" style="cursor: pointer; display: flex; align-items: center; gap: 6px; background-color: transparent; color: white; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 6px; padding: 6px 12px;">
                             <span style="font-size: 16px;"></span> 
@@ -43,7 +42,7 @@
                         <div class="bc-dropdown-content" style="min-width: 200px; right: 0; left: auto; margin-top: 6px; padding: 6px 0; background-color: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
                             <div style="padding: 10px 16px; border-bottom: 1px solid #eee; color: #333; font-size: 13px;">
                                 {% if lang == 'en' %}Signed in as{% else %}Đăng nhập với tư cách{% endif %}<br>
-                                <strong style="color: #000;">Giảng viên NEU</strong>
+                                <strong style="color: #000;">{{ teacher_code }}</strong>
                             </div>
                             
                             <a href="/my-curriculum" style="color: #000; text-decoration: none; padding: 10px 16px; display: block;">

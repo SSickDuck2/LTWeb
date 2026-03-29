@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
+from starlette.middleware.sessions import SessionMiddleware
 
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -17,11 +18,14 @@ from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
 from backend.routes.curricula import router as curricula_router
 from backend.routes.subjects import router as subjects_router
-from backend.orm import Teacher
+from backend.orm import Teacher, SessionLocal
 from backend.database import get_db
 
 app = FastAPI(title="NEU Curriculum API", version="1.0.0")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Add session middleware for authentication
+app.add_middleware(SessionMiddleware, secret_key="neu-curriculum-secret-key-2024")
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -48,6 +52,85 @@ def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "db": db_state,
     }
+
+
+# ============================================================================
+# Authentication Endpoints
+# ============================================================================
+
+def _get_current_teacher(request: Request) -> Optional[str]:
+    """Lấy mã giáo viên từ session, nếu đã đăng nhập"""
+    return request.session.get("teacher_code")
+
+
+def _verify_teacher_password(teacher_code: str, password: str) -> bool:
+    """Kiểm tra mật khẩu giáo viên"""
+    db = SessionLocal()
+    try:
+        teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+        if not teacher:
+            return False
+        return pwd_context.verify(password, teacher.password_hash)
+    finally:
+        db.close()
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    """Trang đăng nhập"""
+    # Nếu đã đăng nhập, chuyển hướng về trang chủ
+    if _get_current_teacher(request):
+        return RedirectResponse(url="/", status_code=303)
+    
+    lang = _get_lang_from_request(request)
+    error = request.query_params.get("error", "")
+    
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "lang": lang,
+            "error": error,
+        },
+    )
+
+
+@app.post("/login", response_class=HTMLResponse)
+def login(request: Request, teacher_code: str = Form(...), password: str = Form(...)):
+    """Xử lý đăng nhập"""
+    # Kiểm tra username/password
+    if not _verify_teacher_password(teacher_code, password):
+        lang = _get_lang_from_request(request)
+        error_msg = "Mã giảng viên hoặc mật khẩu không chính xác" if lang == "vi" else "Invalid Teacher ID or password"
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "lang": lang,
+                "error": error_msg,
+            },
+        )
+    
+    # Lưu session
+    request.session["teacher_code"] = teacher_code
+    
+    db = SessionLocal()
+    try:
+        teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+        if teacher:
+            request.session["teacher_id"] = teacher.teacher_code
+    finally:
+        db.close()
+    
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/logout")
+def logout(request: Request):
+    """Đăng xuất"""
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
 
 @app.get("/set-lang")
 def set_language(lang: str, next_url: str = "/"):
@@ -145,6 +228,11 @@ def _parse_optional_id(value: Optional[str]) -> Optional[int]:
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Query(None)):
     """Home page - list of schools"""
+    # Check authentication
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         lang = _get_lang_from_request(request)
         data = get_table_data("schools", page=page, page_size=10, search=search)
@@ -158,6 +246,8 @@ def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Q
                 "meta": _build_meta(data, 10),
                 "search": search,
                 "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -172,6 +262,10 @@ def faculties_page(
     search: Optional[str] = Query(None),
 ):
     """Faculties page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         lang = _get_lang_from_request(request)
         school_name = _resolve_name("schools", school_id, lang)
@@ -194,6 +288,8 @@ def faculties_page(
                 "school_name": school_name,
                 "search": search,
                 "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -209,6 +305,10 @@ def majors_page(
     search: Optional[str] = Query(None),
 ):
     """Majors page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         lang = _get_lang_from_request(request)
         school_id_int = _parse_optional_id(school_id)
@@ -235,6 +335,8 @@ def majors_page(
                 "school_name": school_name,
                 "search": search,
                 "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -251,6 +353,10 @@ def curricula_page(
     search: Optional[str] = Query(None),
 ):
     """Curricula page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         lang = _get_lang_from_request(request)
         faculty_id_int = _parse_optional_id(faculty_id)
@@ -281,6 +387,8 @@ def curricula_page(
                 "school_name": school_name,
                 "search": search,
                 "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -298,6 +406,10 @@ def subjects_page(
     search: Optional[str] = Query(None),
 ):
     """Subjects page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         lang = _get_lang_from_request(request)
         major_id_int = _parse_optional_id(major_id)
@@ -335,6 +447,8 @@ def subjects_page(
                 "school_name": school_name,
                 "search": search,
                 "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -351,6 +465,10 @@ def syllabus_page(
     school_id: Optional[str] = Query(None),
 ):
     """Subject details/syllabus page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         lang = _get_lang_from_request(request)
         curricula_id_int = _parse_optional_id(curricula_id)
@@ -385,6 +503,8 @@ def syllabus_page(
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -473,14 +593,10 @@ def login_process(
 
 
 @app.get("/logout")
-def logout_mock(request: Request, next_url: str = "/"):
-    """Đăng xuất: Xóa SẠCH toàn bộ cookie"""
-    response = RedirectResponse(url=next_url, status_code=302)
-    response.delete_cookie("user_token", path="/")
-    response.delete_cookie("user_school_id", path="/")
-    response.delete_cookie("user_faculty_id", path="/")
-    response.delete_cookie("user_major_id", path="/")
-    response.delete_cookie("user_curricula_id", path="/")
+def logout(request: Request):
+    """Clear session and redirect to login"""
+    request.session.clear()
+    response = RedirectResponse(url="/login", status_code=303)
     return response
 
 

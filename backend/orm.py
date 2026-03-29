@@ -4,7 +4,7 @@ import os
 from typing import Optional
 from urllib.parse import quote_plus
 
-from sqlalchemy import JSON, ForeignKey, Index, Integer, create_engine, Column, String, DateTime
+from sqlalchemy import JSON, ForeignKey, Index, Integer, BigInteger, Numeric, create_engine, Column, String, DateTime, Text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.sql import func
@@ -129,81 +129,177 @@ class Base(DeclarativeBase):
 
 
 class School(Base):
-    __tablename__ = "schools"
+    __tablename__ = "schools_new"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    en_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_slug: Mapped[Optional[str]] = mapped_column(Text)
+    en_locale: Mapped[Optional[str]] = mapped_column(Text)
+    en_description: Mapped[Optional[str]] = mapped_column(Text)
+    en_code: Mapped[Optional[str]] = mapped_column(Text)
+    en_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    vn_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_slug: Mapped[Optional[str]] = mapped_column(Text)
+    vn_locale: Mapped[Optional[str]] = mapped_column(Text)
+    vn_description: Mapped[Optional[str]] = mapped_column(Text)
+    vn_code: Mapped[Optional[str]] = mapped_column(Text)
+    vn_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
 
     faculties: Mapped[list["Faculty"]] = relationship(back_populates="school")
 
 
 class Faculty(Base):
-    __tablename__ = "faculties"
+    __tablename__ = "faculties_new"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    school_id: Mapped[Optional[int]] = mapped_column(ForeignKey("schools.id", ondelete="SET NULL"), index=True)
-    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    school_id: Mapped[Optional[int]] = mapped_column(ForeignKey("schools_new.id", ondelete="SET NULL"), index=True)
+    en_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_slug: Mapped[Optional[str]] = mapped_column(Text)
+    en_locale: Mapped[Optional[str]] = mapped_column(Text)
+    en_description: Mapped[Optional[str]] = mapped_column(Text)
+    en_code: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    en_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    vn_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_slug: Mapped[Optional[str]] = mapped_column(Text)
+    vn_locale: Mapped[Optional[str]] = mapped_column(Text)
+    vn_description: Mapped[Optional[str]] = mapped_column(Text)
+    vn_code: Mapped[Optional[str]] = mapped_column(Text)
+    vn_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
 
     school: Mapped[Optional[School]] = relationship(back_populates="faculties")
     majors: Mapped[list["Major"]] = relationship(back_populates="faculty")
 
 
 class Major(Base):
-    __tablename__ = "majors"
+    __tablename__ = "majors_new"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    faculty_id: Mapped[Optional[int]] = mapped_column(ForeignKey("faculties.id", ondelete="SET NULL"), index=True)
-    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    faculty_id: Mapped[Optional[int]] = mapped_column(ForeignKey("faculties_new.id", ondelete="SET NULL"), index=True)
+    name: Mapped[Optional[str]] = mapped_column(Text)
+    slug: Mapped[Optional[str]] = mapped_column(Text)
+    locale: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    faculty_code: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    en_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_slug: Mapped[Optional[str]] = mapped_column(Text)
+    en_locale: Mapped[Optional[str]] = mapped_column(Text)
+    en_description: Mapped[Optional[str]] = mapped_column(Text)
+    en_faculty_code: Mapped[Optional[str]] = mapped_column(Text)
+    en_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    vn_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_slug: Mapped[Optional[str]] = mapped_column(Text)
+    vn_locale: Mapped[Optional[str]] = mapped_column(Text)
+    vn_description: Mapped[Optional[str]] = mapped_column(Text)
+    vn_faculty_code: Mapped[Optional[str]] = mapped_column(Text)
+    vn_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
 
     faculty: Mapped[Optional[Faculty]] = relationship(back_populates="majors")
     curricula: Mapped[list["Curriculum"]] = relationship(back_populates="major")
 
 
 class Curriculum(Base):
-    __tablename__ = "curricula"
+    __tablename__ = "curriculum_new"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    major_id: Mapped[Optional[int]] = mapped_column(ForeignKey("majors.id", ondelete="SET NULL"), index=True)
-    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    major_id: Mapped[Optional[int]] = mapped_column(ForeignKey("majors_new.id", ondelete="SET NULL"), index=True)
+    name: Mapped[Optional[str]] = mapped_column(Text)
+    slug: Mapped[Optional[str]] = mapped_column(Text)
+    locale: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    code: Mapped[Optional[str]] = mapped_column(Text)
+    credits: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
+    effective_year: Mapped[Optional[int]] = mapped_column(Integer)
+    created_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    en_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_slug: Mapped[Optional[str]] = mapped_column(Text)
+    en_locale: Mapped[Optional[str]] = mapped_column(Text)
+    en_description: Mapped[Optional[str]] = mapped_column(Text)
+    en_code: Mapped[Optional[str]] = mapped_column(Text)
+    en_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    vn_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_slug: Mapped[Optional[str]] = mapped_column(Text)
+    vn_locale: Mapped[Optional[str]] = mapped_column(Text)
+    vn_description: Mapped[Optional[str]] = mapped_column(Text)
+    vn_code: Mapped[Optional[str]] = mapped_column(Text)
+    vn_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
 
     major: Mapped[Optional[Major]] = relationship(back_populates="curricula")
     subject_links: Mapped[list["CurriculumSubject"]] = relationship(back_populates="curriculum")
 
 
 class Subject(Base):
-    __tablename__ = "subjects"
+    __tablename__ = "subjects_new"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    attribute_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    attribute_en: Mapped[Optional[dict]] = mapped_column(JSON)
-    raw_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[Optional[str]] = mapped_column(Text)
+    slug: Mapped[Optional[str]] = mapped_column(Text)
+    name: Mapped[Optional[str]] = mapped_column(Text)
+    locale: Mapped[Optional[str]] = mapped_column(Text)
+    short_name: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    credits: Mapped[Optional[float]] = mapped_column(Numeric(5, 2))
+    lecture_hours: Mapped[Optional[int]] = mapped_column(Integer)
+    practice_hours: Mapped[Optional[int]] = mapped_column(Integer)
+    created_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    en_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_slug: Mapped[Optional[str]] = mapped_column(Text)
+    en_locale: Mapped[Optional[str]] = mapped_column(Text)
+    en_short_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_description: Mapped[Optional[str]] = mapped_column(Text)
+    en_code: Mapped[Optional[str]] = mapped_column(Text)
+    en_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    vn_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_slug: Mapped[Optional[str]] = mapped_column(Text)
+    vn_locale: Mapped[Optional[str]] = mapped_column(Text)
+    vn_short_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_description: Mapped[Optional[str]] = mapped_column(Text)
+    vn_code: Mapped[Optional[str]] = mapped_column(Text)
+    vn_raw_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
 
     curriculum_links: Mapped[list["CurriculumSubject"]] = relationship(back_populates="subject")
 
 class CurriculumSubject(Base):
-    __tablename__ = "curriculum_subjects"
+    __tablename__ = "curriculum_subjects_new"
     __table_args__ = (
         Index("idx_curriculum_subjects_curricula_id", "curricula_id"),
         Index("idx_curriculum_subjects_subject_id", "subject_id"),
     )
 
-    curricula_id: Mapped[int] = mapped_column(ForeignKey("curricula.id", ondelete="CASCADE"), primary_key=True)
-    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"), primary_key=True)
-    link_attributes_vn: Mapped[Optional[dict]] = mapped_column(JSON)
-    link_attributes_en: Mapped[Optional[dict]] = mapped_column(JSON)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    curricula_id: Mapped[int] = mapped_column(ForeignKey("curriculum_new.id", ondelete="CASCADE"), index=True)
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects_new.id", ondelete="CASCADE"), index=True)
+    semester: Mapped[Optional[int]] = mapped_column(Integer)
+    year: Mapped[Optional[int]] = mapped_column(Integer)
+    mandatory: Mapped[Optional[bool]] = mapped_column()
+    credit_value: Mapped[Optional[float]] = mapped_column(Numeric(5, 2))
+    link_note: Mapped[Optional[str]] = mapped_column(Text)
+    link_attributes: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
+    en_note: Mapped[Optional[str]] = mapped_column(Text)
+    en_language: Mapped[Optional[str]] = mapped_column(Text)
+    en_curriculum_subject_name: Mapped[Optional[str]] = mapped_column(Text)
+    en_curriculum_subject_slug: Mapped[Optional[str]] = mapped_column(Text)
+    vn_note: Mapped[Optional[str]] = mapped_column(Text)
+    vn_language: Mapped[Optional[str]] = mapped_column(Text)
+    vn_curriculum_subject_name: Mapped[Optional[str]] = mapped_column(Text)
+    vn_curriculum_subject_slug: Mapped[Optional[str]] = mapped_column(Text)
 
     curriculum: Mapped[Curriculum] = relationship(back_populates="subject_links")
     subject: Mapped[Subject] = relationship(back_populates="curriculum_links")
@@ -215,10 +311,10 @@ class Teacher(Base):
     full_name = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
     
-    school_id = Column(Integer, ForeignKey("schools.id"))
-    faculty_id = Column(Integer, ForeignKey("faculties.id"))
-    major_id = Column(Integer, ForeignKey("majors.id"))
-    curricula_id = Column(Integer, ForeignKey("curricula.id"))
+    school_id = Column(Integer, nullable=True)
+    faculty_id = Column(Integer, nullable=True)
+    major_id = Column(Integer, nullable=True)
+    curricula_id = Column(Integer, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
