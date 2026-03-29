@@ -294,7 +294,6 @@ def _serialize_subject(item: Subject) -> Dict[str, Any]:
         "raw_en": _parse_json(item.en_raw_attributes),
     }
 
-
 def _serialize_item(model_instance: Any) -> Dict[str, Any]:
     if isinstance(model_instance, School):
         return _serialize_school(model_instance)
@@ -797,11 +796,11 @@ def get_scoped_search_suggestions(keyword: str, scope: str, limit_results: int =
                 suggestions.append({"name": name, "url": f"/majors?faculty_id={item_id}"})
 
         elif scope == "schools":
-            query = select(School.id, School.attribute_vn["name"].as_string())
+            query = select(School.id, func.coalesce(School.vn_name, School.en_name))
             query = query.where(
                 or_(
-                    School.attribute_vn["name"].as_string().ilike(normalized_search),
-                    School.attribute_en["name"].as_string().ilike(normalized_search),
+                    School.vn_name.ilike(normalized_search),
+                    School.en_name.ilike(normalized_search),
                 )
             ).limit(limit_results)
             rows = db.execute(query).all()
