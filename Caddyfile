@@ -1,3 +1,0 @@
-syllabus.neu.edu.vn {
-    reverse_proxy api:8000
-}
