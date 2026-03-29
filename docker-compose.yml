@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: neu-curriculum-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Sửa lại URL kết nối tới PostgreSQL/Supabase thật của bạn ở đây
+      - DATABASE_URL=postgresql://user:password@host:port/dbname
+    restart: unless-stopped
