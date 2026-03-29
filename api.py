@@ -146,7 +146,7 @@ def login(request: Request, teacher_code: str = Form(...), password: str = Form(
     return RedirectResponse(url="/", status_code=303)
 
 
-@app.post("/logout")
+@app.get("/logout")
 def logout(request: Request):
     """Đăng xuất"""
     request.session.clear()
@@ -259,12 +259,17 @@ def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Q
         data = get_table_data("schools", page=page, page_size=10, search=search)
         schools = [_apply_language(item, lang) for item in data.get("data", [])]
 
+        bc_paths = [
+            {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+            {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': None}
+        ]
         return _template_response(
             "schools.html",
             request,
             {
                 "schools": schools,
                 "meta": _build_meta(data, 10),
+                "bc_paths": bc_paths,
                 "search": search,
                 "lang": lang,
                 "authenticated": True,
@@ -299,14 +304,26 @@ def faculties_page(
         )
         faculties = [_apply_language(item, lang) for item in data.get("data", [])]
 
+        bc_paths = [
+            {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+            {
+                'name': school_name,
+                'url': f'/?school_id={school_id}',
+                'table': 'schools',
+                'current_id': school_id,
+                'url_template': f'/faculties?school_id=ID_PLACEHOLDER'
+            },
+            {'name': 'Faculties' if lang == 'en' else 'Các Khoa/Viện', 'url': None}
+        ]
+
         return _template_response(
             "faculties.html",
             request,
             {
                 "faculties": faculties,
                 "meta": _build_meta(data, 10),
+                "bc_paths": bc_paths,
                 "school_id": school_id,
-                "school_name": school_name,
                 "search": search,
                 "lang": lang,
                 "authenticated": True,
@@ -344,16 +361,35 @@ def majors_page(
         )
         majors = [_apply_language(item, lang) for item in data.get("data", [])]
 
+        bc_paths = [
+            {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+            {
+                'name': school_name,
+                'url': f'/?school_id={school_id_int}',
+                'table': 'schools',
+                'current_id': school_id_int,
+                'url_template': f'/faculties?school_id=ID_PLACEHOLDER'
+            },
+            {
+                'name': faculty_name,
+                'url': f'/faculties?school_id={school_id_int}',
+                'table': 'faculties',
+                'parent_col': 'school_id',
+                'parent_id': school_id_int,
+                'current_id': faculty_id,
+                'url_template': f'/majors?faculty_id=ID_PLACEHOLDER&school_id={school_id_int}'
+            },
+            {'name': 'Majors' if lang == 'en' else 'Các Ngành', 'url': None}
+        ]
         return _template_response(
             "majors.html",
             request,
             {
                 "majors": majors,
                 "meta": _build_meta(data, 10),
+                "bc_paths": bc_paths,
                 "faculty_id": faculty_id,
-                "faculty_name": faculty_name,
                 "school_id": school_id_int,
-                "school_name": school_name,
                 "search": search,
                 "lang": lang,
                 "authenticated": True,
@@ -394,18 +430,46 @@ def curricula_page(
         )
         curricula = [_apply_language(item, lang) for item in data.get("data", [])]
 
+        bc_paths = [
+            {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+            {
+                'name': school_name,
+                'url': f'/?school_id={school_id_int}',
+                'table': 'schools',
+                'current_id': school_id_int,
+                'url_template': f'/faculties?school_id=ID_PLACEHOLDER'
+            },
+            {
+                'name': faculty_name,
+                'url': f'/faculties?school_id={school_id_int}',
+                'table': 'faculties',
+                'parent_col': 'school_id',
+                'parent_id': school_id_int,
+                'current_id': faculty_id_int,
+                'url_template': f'/majors?faculty_id=ID_PLACEHOLDER&school_id={school_id_int}'
+            },
+            {
+                'name': major_name,
+                'url': f'/majors?faculty_id={faculty_id_int}&school_id={school_id_int}',
+                'table': 'majors',
+                'parent_col': 'faculty_id',
+                'parent_id': faculty_id_int,
+                'current_id': major_id,
+                'url_template': f'/curricula?major_id=ID_PLACEHOLDER&faculty_id={faculty_id_int}&school_id={school_id_int}'
+            },
+            {'name': 'Curricula' if lang == 'en' else 'Các CTĐT', 'url': None}
+        ]
+
         return _template_response(
             "curricula.html",
             request,
             {
                 "curricula": curricula,
                 "meta": _build_meta(data, 10),
+                "bc_paths": bc_paths,
                 "major_id": major_id,
-                "major_name": major_name,
                 "faculty_id": faculty_id_int,
-                "faculty_name": faculty_name,
                 "school_id": school_id_int,
-                "school_name": school_name,
                 "search": search,
                 "lang": lang,
                 "authenticated": True,
@@ -452,20 +516,56 @@ def subjects_page(
         )
         subjects = [_apply_language(item, lang) for item in data.get("data", [])]
 
+        bc_paths = [
+            {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+            {
+                'name': school_name,
+                'url': f'/?school_id={school_id_int}',
+                'table': 'schools',
+                'current_id': school_id_int,
+                'url_template': f'/faculties?school_id=ID_PLACEHOLDER'
+            },
+            {
+                'name': faculty_name,
+                'url': f'/faculties?school_id={school_id_int}',
+                'table': 'faculties',
+                'parent_col': 'school_id',
+                'parent_id': school_id_int,
+                'current_id': faculty_id_int,
+                'url_template': f'/majors?faculty_id=ID_PLACEHOLDER&school_id={school_id_int}'
+            },
+            {
+                'name': major_name,
+                'url': f'/majors?faculty_id={faculty_id_int}&school_id={school_id_int}',
+                'table': 'majors',
+                'parent_col': 'faculty_id',
+                'parent_id': faculty_id_int,
+                'current_id': major_id_int,
+                'url_template': f'/curricula?major_id=ID_PLACEHOLDER&faculty_id={faculty_id_int}&school_id={school_id_int}'
+            },
+            {
+                'name': curriculum_name,
+                'url': f'/curricula?major_id={major_id_int}&faculty_id={faculty_id_int}&school_id={school_id_int}',
+                'table': 'curricula',
+                'parent_col': 'major_id',
+                'parent_id': major_id_int,
+                'current_id': curricula_id,
+                'url_template': f'/subjects?curricula_id=ID_PLACEHOLDER&major_id={major_id_int}&faculty_id={faculty_id_int}&school_id={school_id_int}'
+            },
+            {'name': 'Subjects' if lang == 'en' else 'Các Môn Học', 'url': None}
+        ]
+
         return _template_response(
             "subjects.html",
             request,
             {
                 "subjects": subjects,
                 "meta": _build_meta(data, current_page_size),
+                "bc_paths": bc_paths,
                 "curricula_id": curricula_id,
-                "curriculum_name": curriculum_name,
                 "major_id": major_id_int,
-                "major_name": major_name,
                 "faculty_id": faculty_id_int,
-                "faculty_name": faculty_name,
                 "school_id": school_id_int,
-                "school_name": school_name,
                 "search": search,
                 "lang": lang,
                 "authenticated": True,
@@ -475,6 +575,9 @@ def subjects_page(
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1>"
 
+
+import json
+import os
 
 @app.get("/syllabus", response_class=HTMLResponse)
 def syllabus_page(
@@ -496,6 +599,7 @@ def syllabus_page(
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
+        
         subject = None
         if curricula_id_int is not None:
             subject = get_subject_from_curriculum(curricula_id_int, subject_id)
@@ -509,23 +613,75 @@ def syllabus_page(
         faculty_name = _resolve_name("faculties", faculty_id_int, lang)
         school_name = _resolve_name("schools", school_id_int, lang)
 
+        syllabus_detail = None
+        try:
+            with open("detailSyllabus.json", "r", encoding="utf-8") as f:
+                syllabus_detail = json.load(f)
+        except Exception as e:
+            print(f"Không thể đọc file JSON: {e}")
+
+        bc_paths = [
+            {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+            {
+                'name': school_name,
+                'url': f'/?school_id={school_id_int}',
+                'table': 'schools',
+                'current_id': school_id_int,
+                'url_template': f'/faculties?school_id=ID_PLACEHOLDER'
+            },
+            {
+                'name': faculty_name,
+                'url': f'/faculties?school_id={school_id_int}',
+                'table': 'faculties',
+                'parent_col': 'school_id',
+                'parent_id': school_id_int,
+                'current_id': faculty_id_int,
+                'url_template': f'/majors?faculty_id=ID_PLACEHOLDER&school_id={school_id_int}'
+            },
+            {
+                'name': major_name,
+                'url': f'/majors?faculty_id={faculty_id_int}&school_id={school_id_int}',
+                'table': 'majors',
+                'parent_col': 'faculty_id',
+                'parent_id': faculty_id_int,
+                'current_id': major_id_int,
+                'url_template': f'/curricula?major_id=ID_PLACEHOLDER&faculty_id={faculty_id_int}&school_id={school_id_int}'
+            },
+            {
+                'name': curriculum_name,
+                'url': f'/curricula?major_id={major_id_int}&faculty_id={faculty_id_int}&school_id={school_id_int}',
+                'table': 'curricula',
+                'parent_col': 'major_id',
+                'parent_id': major_id_int,
+                'current_id': curricula_id_int,
+                'url_template': f'/subjects?curricula_id=ID_PLACEHOLDER&major_id={major_id_int}&faculty_id={faculty_id_int}&school_id={school_id_int}'
+            },
+            {
+                'name': subject_name,
+                'url': f'/subjects?curricula_id={curricula_id_int}&major_id={major_id_int}&faculty_id={faculty_id_int}&school_id={school_id_int}',
+                'table': 'subjects',
+                'parent_col': 'curricula_id',
+                'parent_id': curricula_id_int,
+                'current_id': subject_id,
+                'url_template': f'/syllabus?subject_id=ID_PLACEHOLDER&curricula_id={curricula_id_int}&major_id={major_id_int}&faculty_id={faculty_id_int}&school_id={school_id_int}'
+            },
+            {'name': 'Syllabus' if lang == 'en' else 'Đề cương', 'url': None}
+        ]
+
         return _template_response(
             "syllabus.html",
             request,
             {
                 "subject": subject,
-                "subject_name": subject_name,
+                "bc_paths": bc_paths,
                 "curricula_id": curricula_id_int,
-                "curriculum_name": curriculum_name,
                 "major_id": major_id_int,
-                "major_name": major_name,
                 "faculty_id": faculty_id_int,
-                "faculty_name": faculty_name,
                 "school_id": school_id_int,
-                "school_name": school_name,
                 "lang": lang,
                 "authenticated": True,
                 "teacher_code": teacher_code,
+                "detail": syllabus_detail,
             },
         )
     except Exception as e:
@@ -572,73 +728,6 @@ def get_siblings_api(
         return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-@app.get("/login")
-def login_page(request: Request):
-    """Chỉ làm nhiệm vụ hiển thị trang login.html cho người dùng nhập liệu"""
-    return _template_response("login.html", request)
-
-
-@app.post("/login")
-def login_process(
-    request: Request, 
-    teacher_code: str = Form(...),   
-    password: str = Form(...),       
-    db: Session = Depends(get_db)    
-):
-    """Xử lý dữ liệu khi người dùng bấm nút Đăng nhập"""
-    
-    # 1. Tìm giáo viên trong Database
-    teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
-    
-    # 2. Kiểm tra mật khẩu (Tạm thời so sánh thẳng)
-    if not teacher or not pwd_context.verify(password, teacher.password_hash):
-        return _template_response(
-            "login.html",
-            request,
-            {
-                "error": "Sai mã giảng viên hoặc mật khẩu",
-            },
-        )
-
-    # 3. Tạo cookie với dữ liệu ĐỘNG
-    response = RedirectResponse(url="/", status_code=302)
-    
-    response.set_cookie(key="user_token", value=teacher.teacher_code, max_age=86400, path="/")
-    
-    # Ép kiểu an toàn: Nếu có ID thì biến thành chuỗi, nếu NULL thì để chuỗi rỗng
-    response.set_cookie(key="user_token", value=teacher.teacher_code, path="/")
-    response.set_cookie(key="user_school_id", value=str(teacher.school_id) if teacher.school_id else "", path="/") 
-    response.set_cookie(key="user_faculty_id", value=str(teacher.faculty_id) if teacher.faculty_id else "", path="/") 
-    response.set_cookie(key="user_major_id", value=str(teacher.major_id) if teacher.major_id else "", path="/") 
-    response.set_cookie(key="user_curricula_id", value=str(teacher.curricula_id) if teacher.curricula_id else "", path="/")
-    
-    return response
-
-
-@app.get("/logout")
-def logout(request: Request):
-    """Clear session and redirect to login"""
-    request.session.clear()
-    response = RedirectResponse(url="/login", status_code=303)
-    return response
-
-
-@app.get("/my-curriculum")
-def my_curriculum(request: Request):
-    """Nút Đi tắt: Tự động chuyển hướng giảng viên thẳng đến trang CTĐT của họ"""
-    curricula_id = request.cookies.get("user_curricula_id")
-    major_id = request.cookies.get("user_major_id", "")
-    faculty_id = request.cookies.get("user_faculty_id", "")
-    school_id = request.cookies.get("user_school_id", "")
-    
-    if curricula_id:
-        # Truyền ĐỦ 4 biến để thanh Breadcrumb không bị gãy
-        target_url = f"/subjects?curricula_id={curricula_id}&major_id={major_id}&faculty_id={faculty_id}&school_id={school_id}"
-        return RedirectResponse(url=target_url, status_code=302)
-        
-    # Nếu chưa đăng nhập hoặc lỗi, bắt quay về trang chủ
-    return RedirectResponse(url="/", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
