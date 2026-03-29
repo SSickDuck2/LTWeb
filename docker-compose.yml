@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: neu-curriculum-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Thay thế bằng URL thật. Ví dụ với Supabase:
+      # - DATABASE_URL=postgresql://postgres.xxxxxx:your_password@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+      - DATABASE_URL=postgresql://postgres.gvorkioeezskxarenfui:Y8Hp5KAPBrQlZNDH@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
+    restart: unless-stopped

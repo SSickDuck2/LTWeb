@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "UI/base.html" %}
 
 {% import "UI/components.html" as components with context %}
 
@@ -113,33 +113,30 @@
 {% endblock %}
 
 {% block main_content %}
-<div class="breadcrumb">
-    <a href="/">Trang chủ</a> <span>/</span> 
-    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span> 
-    <a href="/majors?faculty_id={{ faculty_id }}">{{ faculty_name }}</a> <span>/</span> 
-    <a href="/curricula?major_id={{ major_id }}">{{ major_name }}</a> <span>/</span> 
-    <a href="/subjects?curricula_id={{ curricula_id }}">{{ curriculum_name }}</a> <span>/</span> 
-    <strong>{{ subject_name }}</strong>
+
+{% set bc_paths = [
+    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
+    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
+    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Curricula' if lang == 'en' else 'CTĐT', 'url': '/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Subjects' if lang == 'en' else 'Môn học', 'url': '/subjects?curricula_id=' ~ curricula_id ~ '&major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Syllabus' if lang == 'en' else 'Đề cương', 'url': None}
+] %}
+{{ components.breadcrumb(bc_paths) }}
+
+<div class="syllabus-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <h2 style="color: #00529c; margin: 0;">{% if lang == 'en' %}Syllabus Details{% else %}Chi tiết Đề cương{% endif %}</h2>
+    
+    <div class="syllabus-actions" style="display: flex; gap: 10px;">
+        <button class="btn-primary" style="padding: 8px 16px;">
+            {% if lang == 'en' %}Edit Syllabus{% else %}Sửa Đề Cương{% endif %}
+        </button>
+        <button class="btn-soft" style="padding: 8px 16px; border-radius: 6px;">
+            {% if lang == 'en' %}Print{% else %}In{% endif %}
+        </button>
+    </div>
 </div>
-<div class="table-wrapper" style="padding: 30px;">
-    {% if subject %}
-    <div style="margin-bottom: 30px;">
-        <h2 style="color: #333; margin-bottom: 20px;">{{ subject.attributes.name }}</h2>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">MÃ MÔN</p>
-                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.subCode or 'N/A' }}</p>
-            </div>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">TÍN CHỈ</p>
-                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.credits or '0' }} TC</p>
-            </div>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 5px;">KIỂU MÔN</p>
-                <p style="color: #333; font-size: 18px; font-weight: 600;">{{ subject.attributes.type or 'Thường' }}</p>
-            </div>
-        </div>
 
 {% set bc_paths = [
     {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},

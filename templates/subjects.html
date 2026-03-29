@@ -1,54 +1,36 @@
-{% extends "base.html" %}
+{% extends "UI/base.html" %}
+{% import "UI/components.html" as components with context %}
 
-{% block title %}Các Môn Học - NEU Curriculum{% endblock %}
-
-{% set nav_qs -%}{% if major_id is not none %}&major_id={{ major_id }}{% endif %}{% if faculty_id is not none %}&faculty_id={{ faculty_id }}{% endif %}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}{%- endset %}
-{% set search_qs -%}{% if search %}&search={{ search|urlencode }}{% endif %}{%- endset %}
+{% block title %}{% if lang == 'en' %}Subjects{% else %}Các Môn Học{% endif %} - NEU Curriculum{% endblock %}
 
 {% block main_content %}
-<div class="breadcrumb">
-    <a href="/">Trang chủ</a> <span>/</span> 
-    {% if school_id is not none %}
-    <a href="/faculties?school_id={{ school_id }}">{{ school_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ school_name }}</span> <span>/</span>
-    {% endif %}
-    {% if faculty_id is not none %}
-    <a href="/majors?faculty_id={{ faculty_id }}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}">{{ faculty_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ faculty_name }}</span> <span>/</span>
-    {% endif %}
-    {% if major_id is not none %}
-    <a href="/curricula?major_id={{ major_id }}{% if faculty_id is not none %}&faculty_id={{ faculty_id }}{% endif %}{% if school_id is not none %}&school_id={{ school_id }}{% endif %}">{{ major_name }}</a> <span>/</span>
-    {% else %}
-    <span>{{ major_name }}</span> <span>/</span>
-    {% endif %}
-    <strong>{{ curriculum_name }}</strong> <span>/</span> <strong>Các Môn Học</strong>
-</div>
-<div class="filters">
-    <div class="filter-group">
-        <form method="GET" style="display: flex; gap: 10px; align-items: center;">
-            <input type="hidden" name="curricula_id" value="{{ curricula_id }}">
-            {% if major_id is not none %}
-            <input type="hidden" name="major_id" value="{{ major_id }}">
-            {% endif %}
-            {% if faculty_id is not none %}
-            <input type="hidden" name="faculty_id" value="{{ faculty_id }}">
-            {% endif %}
-            {% if school_id is not none %}
-            <input type="hidden" name="school_id" value="{{ school_id }}">
-            {% endif %}
-            <label for="search">Tìm kiếm:</label>
-            <div style="position: relative; flex: 1; max-width: 300px;">
-                <input type="text" id="search" name="search" data-scope="subjects" placeholder="Nhập tên môn học..." value="{{ search or '' }}" autocomplete="off" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                <div id="search-dropdown" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 300px; overflow-y: auto; text-align: left;">
-                </div>
-            </div>
-            <button type="submit">Tìm kiếm</button>
-            <a href="/subjects?curricula_id={{ curricula_id }}{{ nav_qs }}" style="padding: 8px 20px; background: #999; color: white; border-radius: 4px; text-decoration: none;">Reset</a>
-        </form>
-    </div>
-</div>
+
+{% set bc_paths = [
+    {'name': 'Home' if lang == 'en' else 'Trang chủ', 'url': '/'},
+    {'name': 'Schools' if lang == 'en' else 'Các Trường', 'url': '/'},
+    {'name': 'Faculties' if lang == 'en' else 'Khoa/Viện', 'url': '/faculties?school_id=' ~ school_id},
+    {'name': 'Majors' if lang == 'en' else 'Ngành', 'url': '/majors?faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Curricula' if lang == 'en' else 'CTĐT', 'url': '/curricula?major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id},
+    {'name': 'Subjects' if lang == 'en' else 'Các Môn Học', 'url': None}
+] %}
+{{ components.breadcrumb(bc_paths) }}
+
+{% set hidden_fields %}
+    <input type="hidden" name="school_id" value="{{ school_id }}">
+    <input type="hidden" name="faculty_id" value="{{ faculty_id }}">
+    <input type="hidden" name="major_id" value="{{ major_id }}">
+    <input type="hidden" name="curricula_id" value="{{ curricula_id }}">
+{% endset %}
+
+{{ components.search_bar(
+    action_url='/subjects',
+    scope='subjects',
+    placeholder='Enter subject name...' if lang == 'en' else 'Nhập tên môn học...',
+    search_val=search or '',
+    reset_url='/subjects?curricula_id=' ~ curricula_id ~ '&major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id,
+    hidden_inputs=hidden_fields
+) }}
+
 <div class="table-wrapper">
     {% if subjects and subjects|length > 0 %}
     <table>
@@ -66,7 +48,7 @@
             <tr>
                 <td><span class="badge">{{ subject.attributes.subjectCode or subject.attributes.subCode or 'N/A' }}</span></td>
                 <td>
-                    <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}{{ nav_qs }}" class="row-link">
+                    <a href="/syllabus?subject_id={{ subject.id }}&curricula_id={{ curricula_id }}&major_id={{ major_id }}&faculty_id={{ faculty_id }}&school_id={{ school_id }}" class="row-link">
                         {{ subject.attributes.name }}
                     </a>
                 </td>
@@ -84,21 +66,11 @@
         </tbody>
     </table>
 
-    {% if meta.total > meta.pageSize %}
-    <div class="pagination">
-        {% if meta.hasPrev %}
-        <a href="/subjects?curricula_id={{ curricula_id }}{{ nav_qs }}{{ search_qs }}&page=1" class="page-link">« Trang đầu</a>
-        <a href="/subjects?curricula_id={{ curricula_id }}{{ nav_qs }}{{ search_qs }}&page={{ meta.page - 1 }}" class="page-link">‹ Trước</a>
-        {% endif %}
-
-        <span>Trang <strong>{{ meta.page }}</strong> / <strong>{{ meta.totalPages }}</strong></span>
-
-        {% if meta.hasNext %}
-        <a href="/subjects?curricula_id={{ curricula_id }}{{ nav_qs }}{{ search_qs }}&page={{ meta.page + 1 }}" class="page-link">Sau ›</a>
-        <a href="/subjects?curricula_id={{ curricula_id }}{{ nav_qs }}{{ search_qs }}&page={{ meta.totalPages }}" class="page-link">Trang cuối »</a>
-        {% endif %}
-    </div>
-    {% endif %}
+    {% set search_qs = ('&search=' ~ search|urlencode) if search else '' %}
+    {{ components.pagination(
+        meta=meta, 
+        base_url='/subjects?curricula_id=' ~ curricula_id ~ '&major_id=' ~ major_id ~ '&faculty_id=' ~ faculty_id ~ '&school_id=' ~ school_id ~ search_qs
+    ) }}
     {% else %}
     <div class="empty-state">
         <p>{{ 'No subjects found for this curriculum' if lang == 'en' else 'Không tìm thấy môn học nào cho chương trình này' }}</p>

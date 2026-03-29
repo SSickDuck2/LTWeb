@@ -2,11 +2,15 @@ from math import ceil
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
+from starlette.middleware.sessions import SessionMiddleware
+
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
 from backend.database import check_db_connection, get_single_item, get_subject_from_curriculum, get_table_data, get_scoped_search_suggestions
 from backend.routes.schools import router as schools_router
@@ -14,12 +18,39 @@ from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
 from backend.routes.curricula import router as curricula_router
 from backend.routes.subjects import router as subjects_router
+from backend.orm import Teacher, SessionLocal
+from backend.database import get_db
 
 app = FastAPI(title="NEU Curriculum API", version="1.0.0")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Add session middleware for authentication
+app.add_middleware(SessionMiddleware, secret_key="neu-curriculum-secret-key-2024")
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+def _template_response(
+    name: str,
+    request: Request,
+    context: Optional[Dict[str, Any]] = None,
+    status_code: int = 200,
+):
+    payload = dict(context or {})
+    payload.setdefault("request", request)
+    try:
+        # Starlette/FastAPI newer signature
+        return templates.TemplateResponse(
+            request=request,
+            name=name,
+            context=payload,
+            status_code=status_code,
+        )
+    except TypeError:
+        # Backward compatibility with older signature
+        return templates.TemplateResponse(name, payload, status_code=status_code)
 
 # API routes
 app.include_router(schools_router, prefix="/api")
@@ -43,12 +74,101 @@ def health_check():
         "db": db_state,
     }
 
+
+# ============================================================================
+# Authentication Endpoints
+# ============================================================================
+
+def _get_current_teacher(request: Request) -> Optional[str]:
+    """Lấy mã giáo viên từ session, nếu đã đăng nhập"""
+    return request.session.get("teacher_code")
+
+
+def _verify_teacher_password(teacher_code: str, password: str) -> bool:
+    """Kiểm tra mật khẩu giáo viên"""
+    db = SessionLocal()
+    try:
+        teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+        if not teacher:
+            return False
+        return pwd_context.verify(password, teacher.password_hash)
+    finally:
+        db.close()
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    """Trang đăng nhập"""
+    # Nếu đã đăng nhập, chuyển hướng về trang chủ
+    if _get_current_teacher(request):
+        return RedirectResponse(url="/", status_code=303)
+    
+    lang = _get_lang_from_request(request)
+    error = request.query_params.get("error", "")
+    
+    return _template_response(
+        "login.html",
+        request,
+        {
+            "lang": lang,
+            "error": error,
+        },
+    )
+
+
+@app.post("/login", response_class=HTMLResponse)
+def login(request: Request, teacher_code: str = Form(...), password: str = Form(...)):
+    """Xử lý đăng nhập"""
+    # Kiểm tra username/password
+    if not _verify_teacher_password(teacher_code, password):
+        lang = _get_lang_from_request(request)
+        error_msg = "Mã giảng viên hoặc mật khẩu không chính xác" if lang == "vi" else "Invalid Teacher ID or password"
+        return _template_response(
+            "login.html",
+            request,
+            {
+                "lang": lang,
+                "error": error_msg,
+            },
+        )
+    
+    # Lưu session
+    request.session["teacher_code"] = teacher_code
+    
+    db = SessionLocal()
+    try:
+        teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+        if teacher:
+            request.session["teacher_id"] = teacher.teacher_code
+    finally:
+        db.close()
+    
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/logout")
+def logout(request: Request):
+    """Đăng xuất"""
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
+
 @app.get("/set-lang")
 def set_language(lang: str, next_url: str = "/"):
     """Lưu lựa chọn ngôn ngữ vào Cookie và chuyển hướng lại trang cũ"""
-    response = RedirectResponse(url=next_url, )
-    response.set_cookie(key="lang", value=lang, max_age=31536000, path="/") # Lưu 1 năm
+    safe_lang = (lang or "vi").lower()
+    if safe_lang not in {"vi", "en"}:
+        safe_lang = "vi"
+
+    safe_next_url = next_url if next_url.startswith("/") else "/"
+    response = RedirectResponse(url=safe_next_url)
+    response.set_cookie(key="lang", value=safe_lang, max_age=31536000, path="/") # Lưu 1 năm
     return response
+
+
+def _get_lang_from_request(request: Request) -> str:
+    lang = (request.cookies.get("lang") or "vi").lower()
+    return lang if lang in {"vi", "en"} else "vi"
 
 def _apply_language(item: dict, lang: str):
     """Hàm áp dụng ngôn ngữ cho 1 item, nếu không có sẽ chèn câu báo lỗi"""
@@ -116,15 +236,6 @@ def _build_meta(payload: Dict[str, Any], page_size: int) -> Dict[str, Any]:
     }
 
 
-def _resolve_name(table: str, item_id: Optional[int]) -> str:
-    if item_id is None:
-        return "Unknown"
-    item = get_single_item(table, item_id)
-    if not item:
-        return "Unknown"
-    return item.get("attributes", {}).get("name", "Unknown")
-
-
 def _parse_optional_id(value: Optional[str]) -> Optional[int]:
     # Keep old bookmarked URLs like "school_id=None" from breaking request validation.
     if value in (None, "", "None", "null"):
@@ -138,16 +249,26 @@ def _parse_optional_id(value: Optional[str]) -> Optional[int]:
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, page: int = Query(1, ge=1), search: Optional[str] = Query(None)):
     """Home page - list of schools"""
+    # Check authentication
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
+        lang = _get_lang_from_request(request)
         data = get_table_data("schools", page=page, page_size=10, search=search)
+        schools = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "schools.html",
+            request,
             {
-                "request": request,
-                "schools": data.get("data", []),
+                "schools": schools,
                 "meta": _build_meta(data, 10),
                 "search": search,
+                "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -162,8 +283,13 @@ def faculties_page(
     search: Optional[str] = Query(None),
 ):
     """Faculties page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
-        school_name = _resolve_name("schools", school_id)
+        lang = _get_lang_from_request(request)
+        school_name = _resolve_name("schools", school_id, lang)
         data = get_table_data(
             "faculties",
             page=page,
@@ -171,16 +297,20 @@ def faculties_page(
             filters={"school_id": school_id},
             search=search,
         )
+        faculties = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "faculties.html",
+            request,
             {
-                "request": request,
-                "faculties": data.get("data", []),
+                "faculties": faculties,
                 "meta": _build_meta(data, 10),
                 "school_id": school_id,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -196,10 +326,15 @@ def majors_page(
     search: Optional[str] = Query(None),
 ):
     """Majors page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
+        lang = _get_lang_from_request(request)
         school_id_int = _parse_optional_id(school_id)
-        faculty_name = _resolve_name("faculties", faculty_id)
-        school_name = _resolve_name("schools", school_id_int)
+        faculty_name = _resolve_name("faculties", faculty_id, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
         data = get_table_data(
             "majors",
             page=page,
@@ -207,18 +342,22 @@ def majors_page(
             filters={"faculty_id": faculty_id},
             search=search,
         )
+        majors = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "majors.html",
+            request,
             {
-                "request": request,
-                "majors": data.get("data", []),
+                "majors": majors,
                 "meta": _build_meta(data, 10),
                 "faculty_id": faculty_id,
                 "faculty_name": faculty_name,
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -235,12 +374,17 @@ def curricula_page(
     search: Optional[str] = Query(None),
 ):
     """Curricula page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
+        lang = _get_lang_from_request(request)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
-        major_name = _resolve_name("majors", major_id)
-        faculty_name = _resolve_name("faculties", faculty_id_int)
-        school_name = _resolve_name("schools", school_id_int)
+        major_name = _resolve_name("majors", major_id, lang)
+        faculty_name = _resolve_name("faculties", faculty_id_int, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
         data = get_table_data(
             "curricula",
             page=page,
@@ -248,12 +392,13 @@ def curricula_page(
             filters={"major_id": major_id},
             search=search,
         )
+        curricula = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "curricula.html",
+            request,
             {
-                "request": request,
-                "curricula": data.get("data", []),
+                "curricula": curricula,
                 "meta": _build_meta(data, 10),
                 "major_id": major_id,
                 "major_name": major_name,
@@ -262,6 +407,9 @@ def curricula_page(
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -279,21 +427,19 @@ def subjects_page(
     search: Optional[str] = Query(None),
 ):
     """Subjects page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
+        lang = _get_lang_from_request(request)
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
         school_id_int = _parse_optional_id(school_id)
-        curriculum_name = _resolve_name("curricula", curricula_id)
-        major_name = _resolve_name("majors", major_id_int)
-        faculty_name = _resolve_name("faculties", faculty_id_int)
-        school_name = _resolve_name("schools", school_id_int)
-        data = get_table_data(
-            "subjects",
-            page=page,
-            page_size=20,
-            filters={"curricula_id": curricula_id},
-            search=search,
-        )
+        curriculum_name = _resolve_name("curricula", curricula_id, lang)
+        major_name = _resolve_name("majors", major_id_int, lang)
+        faculty_name = _resolve_name("faculties", faculty_id_int, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
 
         current_page_size = 1000 if search else 20
 
@@ -304,12 +450,13 @@ def subjects_page(
             filters={"curricula_id": curricula_id},
             search=search,
         )
+        subjects = [_apply_language(item, lang) for item in data.get("data", [])]
 
-        return templates.TemplateResponse(
+        return _template_response(
             "subjects.html",
+            request,
             {
-                "request": request,
-                "subjects": data.get("data", []),
+                "subjects": subjects,
                 "meta": _build_meta(data, current_page_size),
                 "curricula_id": curricula_id,
                 "curriculum_name": curriculum_name,
@@ -320,6 +467,9 @@ def subjects_page(
                 "school_id": school_id_int,
                 "school_name": school_name,
                 "search": search,
+                "lang": lang,
+                "authenticated": True,
+                "teacher_code": teacher_code,
             },
         )
     except Exception as e:
@@ -339,7 +489,12 @@ def syllabus_page(
     school_id: Optional[str] = Query(None),
 ):
     """Subject details/syllabus page"""
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
+        lang = _get_lang_from_request(request)
         curricula_id_int = _parse_optional_id(curricula_id)
         major_id_int = _parse_optional_id(major_id)
         faculty_id_int = _parse_optional_id(faculty_id)
@@ -353,10 +508,10 @@ def syllabus_page(
         if subject:
             subject = _apply_language(subject, lang)
         subject_name = subject.get("attributes", {}).get("name", "Unknown") if subject else "Unknown"
-        curriculum_name = _resolve_name("curricula", curricula_id_int)
-        major_name = _resolve_name("majors", major_id_int)
-        faculty_name = _resolve_name("faculties", faculty_id_int)
-        school_name = _resolve_name("schools", school_id_int)
+        curriculum_name = _resolve_name("curricula", curricula_id_int, lang)
+        major_name = _resolve_name("majors", major_id_int, lang)
+        faculty_name = _resolve_name("faculties", faculty_id_int, lang)
+        school_name = _resolve_name("schools", school_id_int, lang)
 
         syllabus_detail = None
         try:
@@ -367,8 +522,8 @@ def syllabus_page(
 
         return templates.TemplateResponse(
             "syllabus.html",
+            request,
             {
-                "request": request,
                 "subject": subject,
                 "subject_name": subject_name,
                 "curricula_id": curricula_id_int,
@@ -388,10 +543,44 @@ def syllabus_page(
         return f"<h1>Error: {str(e)}</h1>"
     
 @app.get("/api/search/suggestions")
-def search_suggestions_api(q: str = Query(..., min_length=2), scope: str = Query(...)):
+def search_suggestions_api(
+    request: Request, # Thêm tham số request để đọc URL
+    q: str = Query(..., min_length=2), 
+    scope: str = Query(...)
+):
     try:
-        results = get_scoped_search_suggestions(keyword=q, scope=scope)
+        # Tự động quét xem người dùng đang ở trang có ID gì
+        parent_filters = {}
+        for key in ["curricula_id", "major_id", "faculty_id", "school_id"]:
+            val = request.query_params.get(key)
+            if val:
+                parent_filters[key] = val
+                
+        # Truyền bộ lọc vào database
+        results = get_scoped_search_suggestions(keyword=q, scope=scope, parent_filters=parent_filters)
         return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/siblings")
+def get_siblings_api(
+    request: Request,
+    table: str = Query(...),
+    parent_col: Optional[str] = Query(None),
+    parent_id: Optional[int] = Query(None)
+):
+    """API tải danh sách các mục con để hiển thị trong Dropdown Breadcrumb"""
+    try:
+        lang = _get_lang_from_request(request)
+        filters = {parent_col: parent_id} if parent_col and parent_id else None
+        
+        # Lấy tối đa 100 mục con
+        data = get_table_data(table, page=1, page_size=100, filters=filters)
+        items = [_apply_language(item, lang) for item in data.get("data", [])]
+        
+        # Chỉ trả về ID và Tên cho nhẹ
+        result = [{"id": item["id"], "name": item["attributes"]["name"]} for item in items]
+        return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

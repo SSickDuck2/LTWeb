@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="{{ lang or 'vi' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NEU Curriculum{% endblock %}</title>
+
+    <link rel="icon" type="image/png" href="/static/LogoNEU.ico">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <header class="neu-navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">
+                <img src="../static/LogoNEU.png" alt="NEU Crest" class="brand-logo">
+                <div class="brand-text">
+                    <span class="brand-vn">Đại học Kinh tế Quốc dân</span>
+                    <span class="brand-en">National Economics University</span>
+                </div>
+            </a>
+            
+            <div class="nav-links">
+                <a href="/" class="nav-item">{% if lang == 'en' %}Home{% else %}Trang chủ{% endif %}</a>
+                <a href="javascript:void(0);" onclick="setLanguage('vi')" class="nav-item {% if lang == 'vi' or not lang %}active{% endif %}">Tiếng Việt</a>
+                <a href="javascript:void(0);" onclick="setLanguage('en')" class="nav-item {% if lang == 'en' %}active{% endif %}">English</a>
+                
+                {% if authenticated %}
+                    <div class="bc-dropdown user-dropdown" style="margin-left: 10px;">
+                        <button class="nav-btn" style="cursor: pointer; display: flex; align-items: center; gap: 6px; background-color: transparent; color: white; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 6px; padding: 6px 12px;">
+                            <span style="font-size: 16px;"></span> 
+                            {% if lang == 'en' %}Account ▼{% else %}Tài khoản ▼{% endif %}
+                        </button>
+                        
+                        <div class="bc-dropdown-content" style="min-width: 200px; right: 0; left: auto; margin-top: 6px; padding: 6px 0; background-color: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                            <div style="padding: 10px 16px; border-bottom: 1px solid #eee; color: #333; font-size: 13px;">
+                                {% if lang == 'en' %}Signed in as{% else %}Đăng nhập với tư cách{% endif %}<br>
+                                <strong style="color: #000;">{{ teacher_code }}</strong>
+                            </div>
+                            
+                            <a href="/my-curriculum" style="color: #000; text-decoration: none; padding: 10px 16px; display: block;">
+                                {% if lang == 'en' %}My Curriculum{% else %}CTĐT của tôi{% endif %}
+                            </a>
+                            
+                            <a href="javascript:void(0);" onclick="alert('Chức năng đang phát triển!')" style="color: #000; text-decoration: none; padding: 10px 16px; display: block;">
+                                {% if lang == 'en' %}Settings{% else %}Cài đặt hồ sơ{% endif %}
+                            </a>
+                            
+                            <a href="/logout" style="color: #000; font-weight: 600; border-top: 1px solid #eee; text-decoration: none; padding: 10px 16px; display: block;">
+                                {% if lang == 'en' %}Logout{% else %}Đăng xuất{% endif %}
+                            </a>
+                        </div>
+                    </div>
+                {% else %}
+                    <div style="display: flex; gap: 10px; margin-left: 10px;">
+                        <a href="/login" class="nav-btn" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.5); text-decoration: none;">
+                            {% if lang == 'en' %}Login{% else %}Đăng nhập{% endif %}
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+    <div class="container main-content-wrapper">
+        <div class="page-card">
+            {% block main_content %}{% endblock %}
+        </div>
+    </div> 
+    
+    <footer class="neu-footer">
+        <div class="footer-container">
+            <p>&copy; 2026 Đại học Kinh tế Quốc dân - Bản quyền thuộc về NEU</p>
+            <p class="footer-sub">Hệ thống Quản lý Chương trình Đào tạo</p>
+        </div>
+    </footer>
+    
+    <script>
+        const searchInput = document.getElementById('search');
+        const dropdown = document.getElementById('search-dropdown');
+        
+        if (searchInput && dropdown) {
+            let typingTimer;                
+            const doneTypingInterval = 1000; // Đợi 1 giây
+
+            searchInput.addEventListener('input', () => {
+                clearTimeout(typingTimer);
+                const keyword = searchInput.value.trim();
+                const scope = searchInput.getAttribute('data-scope'); // Lấy mục hiện tại (subjects, majors,...)
+                
+                if (keyword.length >= 2 && scope) {
+                    typingTimer = setTimeout(() => {
+                        fetchSuggestions(keyword, scope);
+                    }, doneTypingInterval);
+                } else {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            async function fetchSuggestions(keyword, scope) {
+                try {
+                    // Đọc URL xem trang hiện tại có chứa ID của trường/viện/ngành nào không
+                    const urlParams = new URLSearchParams(window.location.search);
+                    let extraParams = '';
+                    ['curricula_id', 'major_id', 'faculty_id', 'school_id'].forEach(key => {
+                        if (urlParams.has(key)) {
+                            extraParams += `&${key}=${urlParams.get(key)}`;
+                        }
+                    });
+
+                    // Nối các tham số đó vào cuối đường link gửi cho API
+                    const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(keyword)}&scope=${scope}${extraParams}`);
+                    const json = await response.json();
+                    
+                    if (json.status === 'success' && json.data.length > 0) {
+                        renderDropdown(json.data);
+                    } else {
+                        dropdown.innerHTML = '<div style="padding: 10px; color: #999;">Không tìm thấy gợi ý</div>';
+                        dropdown.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.error("Lỗi khi tải gợi ý:", error);
+                }
+            }
+
+            function renderDropdown(data) {
+                let html = '';
+                data.forEach(item => {
+                    html += `
+                        <a href="${item.url}" style="display: block; padding: 10px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
+                            <div style="font-weight: 500;">${item.name}</div>
+                        </a>
+                    `;
+                });
+                dropdown.innerHTML = html;
+                dropdown.style.display = 'block';
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+        }
+
+        function setLanguage(selectedLang) {
+            // Lấy URL hiện tại (bao gồm cả các biến phân trang/tìm kiếm)
+            const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            // Gọi API đổi ngôn ngữ, sau đó quay lại trang đang xem
+            window.location.href = `/set-lang?lang=${selectedLang}&next_url=${currentUrl}`;
+        }
+
+        async function loadBreadcrumbSiblings(element, table, parentCol, parentId, currentId, urlTemplate) {
+            const contentDiv = element.querySelector('.bc-dropdown-content');
+            
+            // Nếu đã tải dữ liệu rồi thì không tải lại nữa
+            if (contentDiv.getAttribute('data-loaded') === 'true') return;
+
+            let apiUrl = `/api/siblings?table=${table}`;
+            if (parentCol && parentId) {
+                apiUrl += `&parent_col=${parentCol}&parent_id=${parentId}`;
+            }
+
+            try {
+                const response = await fetch(apiUrl);
+                const json = await response.json();
+                if (json.status === 'success') {
+                    let html = '';
+                    json.data.forEach(item => {
+                        // Thêm class bc-active nếu mục đó là trang hiện tại
+                        const isActive = item.id == currentId ? 'bc-active' : '';
+                        const url = urlTemplate.replace('ID_PLACEHOLDER', item.id);
+                        html += `<a href="${url}" class="${isActive}">${item.name}</a>`;
+                    });
+                    contentDiv.innerHTML = html;
+                    contentDiv.setAttribute('data-loaded', 'true');
+                } else {
+                    contentDiv.innerHTML = '<div style="padding:10px; color: red;">Lỗi tải dữ liệu</div>';
+                }
+            } catch (e) {
+                contentDiv.innerHTML = '<div style="padding:10px; color: red;">Lỗi kết nối mạng</div>';
+            }
+        }
+    </script>
+</body>
+</html>
