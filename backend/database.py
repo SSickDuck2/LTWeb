@@ -242,19 +242,19 @@ def _serialize_curriculum(item: Curriculum) -> Dict[str, Any]:
 
 
 def _serialize_subject(item: Subject) -> Dict[str, Any]:
-    vn_name = _coalesce(item.vn_name, item.name)
-    vn_slug = _coalesce(item.vn_slug, item.slug)
-    vn_locale = _coalesce(item.vn_locale, item.locale)
-    vn_description = _coalesce(item.vn_description, item.description)
-    vn_short_name = _coalesce(item.vn_short_name, item.short_name)
-    vn_code = _coalesce(item.vn_code, item.code)
+    vn_name = _coalesce(item.vn_name, item.name if item.locale == "vi" else None)
+    vn_slug = _coalesce(item.vn_slug, item.slug if item.locale == "vi" else None)
+    vn_locale = _coalesce(item.vn_locale, item.locale if item.locale == "vi" else None)
+    vn_description = _coalesce(item.vn_description, item.description if item.locale == "vi" else None)
+    vn_short_name = _coalesce(item.vn_short_name, item.short_name if item.locale == "vi" else None)
+    vn_code = _coalesce(item.vn_code, item.code if item.locale == "vi" else None, item.code)
 
-    en_name = _coalesce(item.en_name, item.name)
-    en_slug = _coalesce(item.en_slug, item.slug)
-    en_locale = _coalesce(item.en_locale, item.locale)
-    en_description = _coalesce(item.en_description, item.description)
-    en_short_name = _coalesce(item.en_short_name, item.short_name)
-    en_code = _coalesce(item.en_code, item.code)
+    en_name = _coalesce(item.en_name, item.name if item.locale == "en" else None)
+    en_slug = _coalesce(item.en_slug, item.slug if item.locale == "en" else None)
+    en_locale = _coalesce(item.en_locale, item.locale if item.locale == "en" else None)
+    en_description = _coalesce(item.en_description, item.description if item.locale == "en" else None)
+    en_short_name = _coalesce(item.en_short_name, item.short_name if item.locale == "en" else None)
+    en_code = _coalesce(item.en_code, item.code if item.locale == "en" else None, item.code)
 
     vn = {
         "name": vn_name,
@@ -326,6 +326,30 @@ def _merge_subject_attributes(base_attributes: Dict[str, Any], link: CurriculumS
     return merged
 
 
+def _build_subject_locale_map(db: Session, subjects: List[Subject]) -> Dict[str, Dict[str, Subject]]:
+    codes = sorted({s.code for s in subjects if getattr(s, "code", None)})
+    if not codes:
+        return {}
+
+    rows = db.execute(
+        select(Subject)
+        .where(Subject.code.in_(codes))
+        .where(func.lower(func.coalesce(Subject.locale, "")) .in_(["vi", "en"]))
+    ).scalars().all()
+
+    locale_map: Dict[str, Dict[str, Subject]] = {}
+    for subject in rows:
+        code = subject.code
+        if not code:
+            continue
+        locale = (subject.locale or "").lower()
+        if locale not in {"vi", "en"}:
+            continue
+        locale_map.setdefault(code, {})[locale] = subject
+
+    return locale_map
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
@@ -395,10 +419,26 @@ def get_subjects_by_curriculum(
 
         total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
         rows = db.execute(query.order_by(Subject.id).offset(offset).limit(page_size)).all()
+        locale_map = _build_subject_locale_map(db, [subject for subject, _ in rows])
 
         data = []
         for subject, link in rows:
             base_item = _serialize_item(subject)
+
+            by_code = locale_map.get(subject.code or "", {})
+            vi_row = by_code.get("vi")
+            en_row = by_code.get("en")
+
+            if vi_row is not None:
+                vi_serialized = _serialize_item(vi_row)
+                base_item["attributes"] = vi_serialized.get("attributes", base_item.get("attributes", {}))
+                base_item["raw"] = vi_serialized.get("raw", base_item.get("raw", {}))
+
+            if en_row is not None:
+                en_serialized = _serialize_item(en_row)
+                base_item["attribute_en"] = en_serialized.get("attribute_en", base_item.get("attribute_en", {}))
+                base_item["raw_en"] = en_serialized.get("raw_en", base_item.get("raw_en", {}))
+
             base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link, "vi")
             base_item["attribute_en"] = _merge_subject_attributes(base_item["attribute_en"], link, "en")
             data.append(base_item)
@@ -429,6 +469,22 @@ def get_subject_from_curriculum(curricula_id: int, subject_id: int) -> Optional[
 
         subject, link = row
         base_item = _serialize_item(subject)
+
+        locale_map = _build_subject_locale_map(db, [subject])
+        by_code = locale_map.get(subject.code or "", {})
+        vi_row = by_code.get("vi")
+        en_row = by_code.get("en")
+
+        if vi_row is not None:
+            vi_serialized = _serialize_item(vi_row)
+            base_item["attributes"] = vi_serialized.get("attributes", base_item.get("attributes", {}))
+            base_item["raw"] = vi_serialized.get("raw", base_item.get("raw", {}))
+
+        if en_row is not None:
+            en_serialized = _serialize_item(en_row)
+            base_item["attribute_en"] = en_serialized.get("attribute_en", base_item.get("attribute_en", {}))
+            base_item["raw_en"] = en_serialized.get("raw_en", base_item.get("raw_en", {}))
+
         base_item["attributes"] = _merge_subject_attributes(base_item["attributes"], link, "vi")
         base_item["attribute_en"] = _merge_subject_attributes(base_item["attribute_en"], link, "en")
         return base_item
