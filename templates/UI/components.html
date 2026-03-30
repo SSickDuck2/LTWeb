@@ -48,12 +48,10 @@
             {% set my_major = request.cookies.get('user_major_id') %}
             {% set my_curricula = request.cookies.get('user_curricula_id') %}
             
-            {% if my_curricula and my_curricula != 'None' %}
-            <a href="/subjects?curricula_id={{ my_curricula }}&major_id={{ my_major }}&faculty_id={{ my_faculty }}&school_id={{ my_school }}" 
+            <!-- <a href="/subjects?curricula_id={{ my_curricula }}&major_id={{ my_major }}&faculty_id={{ my_faculty }}&school_id={{ my_school }}" 
                class="btn-my-curriculum">
                 {% if lang == 'en' %}My Curriculum{% else %}CTĐT của tôi{% endif %}
-            </a>
-            {% endif %} 
+            </a> -->
     </div>
 
     <div class="filter-group" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
