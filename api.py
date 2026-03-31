@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Query, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -918,6 +919,66 @@ def my_curriculum(request: Request, to: str = Query("curriculum")):
         return RedirectResponse(url=url, status_code=302)
 
     return RedirectResponse(url="/", status_code=302)
+
+
+# ============================================================================
+# SYLLABUS UPDATE API
+# ============================================================================
+
+class SyllabusUpdateRequest(BaseModel):
+    course_title_vi: Optional[str] = None
+    course_title_en: Optional[str] = None
+    number_of_credits: Optional[float] = None
+    contact_hours: Optional[int] = None
+    self_study_hours: Optional[int] = None
+    course_description_vi: Optional[str] = None
+    course_description_en: Optional[str] = None
+
+
+@app.put("/api/syllabus/update")
+def update_syllabus(request_body: SyllabusUpdateRequest):
+    """Cập nhật thông tin đề cương"""
+    try:
+        # Đọc file JSON hiện tại
+        if not os.path.exists("detailSyllabus.json"):
+            raise HTTPException(status_code=404, detail="Syllabus file not found")
+        
+        with open("detailSyllabus.json", "r", encoding="utf-8") as f:
+            syllabus_data = json.load(f)
+        
+        # Cập nhật các trường được gửi lên
+        if request_body.course_title_vi:
+            syllabus_data["course_title_vi"] = request_body.course_title_vi
+        if request_body.course_title_en:
+            syllabus_data["course_title_en"] = request_body.course_title_en
+        if request_body.number_of_credits is not None:
+            syllabus_data["number_of_credits"] = request_body.number_of_credits
+        if request_body.contact_hours is not None:
+            syllabus_data["contact_hours"] = request_body.contact_hours
+        if request_body.self_study_hours is not None:
+            syllabus_data["self_study_hours"] = request_body.self_study_hours
+        if request_body.course_description_vi:
+            syllabus_data["course_description_vi"] = request_body.course_description_vi
+        if request_body.course_description_en:
+            syllabus_data["course_description_en"] = request_body.course_description_en
+        
+        # Cập nhật timestamp
+        syllabus_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        syllabus_data["updated_by"] = "frontend_user"  # Có thể thay đổi nếu có authentication
+        
+        # Ghi lại file JSON
+        with open("detailSyllabus.json", "w", encoding="utf-8") as f:
+            json.dump(syllabus_data, f, ensure_ascii=False, indent=2)
+        
+        return {
+            "status": "success",
+            "message": "Syllabus updated successfully",
+            "updated_fields": request_body.dict(exclude_none=True)
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating syllabus: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
