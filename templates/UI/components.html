@@ -43,15 +43,35 @@
 <div class="filters" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0; background: white; padding: 12px 16px; border-radius: 8px 8px 0 0; border: 1px solid #f1f5f9; border-bottom: none;">
     
     <div class="filter-left" style="display: flex; align-items: center;">
-            {% set my_school = request.cookies.get('user_school_id') %}
-            {% set my_faculty = request.cookies.get('user_faculty_id') %}
-            {% set my_major = request.cookies.get('user_major_id') %}
-            {% set my_curricula = request.cookies.get('user_curricula_id') %}
-            
-            <a href="/subjects?curricula_id={{ my_curricula }}&major_id={{ my_major }}&faculty_id={{ my_faculty }}&school_id={{ my_school }}" 
-               class="btn-my-curriculum">
-                {% if lang == 'en' %}My Curriculum{% else %}CTĐT của tôi{% endif %}
-            </a>
+            {% set my_school = request.session.get('school_id') or request.cookies.get('user_school_id') %}
+            {% set my_faculty = request.session.get('faculty_id') or request.cookies.get('user_faculty_id') %}
+            {% set my_major = request.session.get('major_id') or request.cookies.get('user_major_id') %}
+            {% set my_curricula = request.session.get('curricula_id') or request.cookies.get('user_curricula_id') %}
+
+            <div class="bc-dropdown" style="padding-bottom: 8px; margin-bottom: -8px;">
+                <button type="button" class="btn-my-curriculum">
+                    {% if lang == 'en' %}My Curriculum{% else %}CTĐT của tôi{% endif %} ▼
+                </button>
+                <div class="bc-dropdown-content" style="min-width: 230px;">
+                    {% if my_school %}
+                        <a href="/my-curriculum?to=faculty">{% if lang == 'en' %}Go to Faculty{% else %}Đi tới Khoa/Viện{% endif %}</a>
+                    {% else %}
+                        <span class="dropdown-disabled">{% if lang == 'en' %}Faculty not assigned{% else %}Chưa gán Khoa/Viện{% endif %}</span>
+                    {% endif %}
+
+                    {% if my_faculty %}
+                        <a href="/my-curriculum?to=major">{% if lang == 'en' %}Go to Major{% else %}Đi tới Ngành{% endif %}</a>
+                    {% else %}
+                        <span class="dropdown-disabled">{% if lang == 'en' %}Major not assigned{% else %}Chưa gán Ngành{% endif %}</span>
+                    {% endif %}
+
+                    {% if my_curricula %}
+                        <a href="/my-curriculum?to=curriculum">{% if lang == 'en' %}Go to Curriculum{% else %}Đi tới CTĐT{% endif %}</a>
+                    {% else %}
+                        <span class="dropdown-disabled">{% if lang == 'en' %}Curriculum not assigned{% else %}Chưa gán CTĐT{% endif %}</span>
+                    {% endif %}
+                </div>
+            </div>
     </div>
 
     <div class="filter-group" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">

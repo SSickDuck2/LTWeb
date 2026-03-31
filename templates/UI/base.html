@@ -44,14 +44,23 @@
                                 {% if lang == 'en' %}Signed in as{% else %}Đăng nhập với tư cách{% endif %}<br>
                                 <strong style="color: #000;">{{ teacher_code }}</strong>
                             </div>
-                            
-                            <!-- <a href="/my-curriculum" style="color: #000; text-decoration: none; padding: 10px 16px; display: block;">
-                                {% if lang == 'en' %}My Curriculum{% else %}CTĐT của tôi{% endif %}
+
+                            <a href="/profile" style="color: #000; text-decoration: none; padding: 10px 16px; display: block;">
+                                {% if lang == 'en' %}Personal Information{% else %}Thông tin cá nhân{% endif %}
                             </a>
-                            
-                            <a href="javascript:void(0);" onclick="alert('Chức năng đang phát triển!')" style="color: #000; text-decoration: none; padding: 10px 16px; display: block;">
-                                {% if lang == 'en' %}Settings{% else %}Cài đặt hồ sơ{% endif %}
-                            </a> -->
+
+                            <div style="padding: 8px 16px 4px 16px; color: #64748b; font-size: 12px; border-top: 1px solid #eee;">
+                                {% if lang == 'en' %}My Curriculum{% else %}CTĐT của tôi{% endif %}
+                            </div>
+                            <a href="/my-curriculum?to=faculty" style="color: #000; text-decoration: none; padding: 8px 16px; display: block;">
+                                {% if lang == 'en' %}Go to Faculty{% else %}Đi tới Khoa/Viện{% endif %}
+                            </a>
+                            <a href="/my-curriculum?to=major" style="color: #000; text-decoration: none; padding: 8px 16px; display: block;">
+                                {% if lang == 'en' %}Go to Major{% else %}Đi tới Ngành{% endif %}
+                            </a>
+                            <a href="/my-curriculum?to=curriculum" style="color: #000; text-decoration: none; padding: 8px 16px; display: block;">
+                                {% if lang == 'en' %}Go to Curriculum{% else %}Đi tới CTĐT{% endif %}
+                            </a>
                             
                             <a href="/logout" style="color: #000; font-weight: 600; border-top: 1px solid #eee; text-decoration: none; padding: 10px 16px; display: block;">
                                 {% if lang == 'en' %}Logout{% else %}Đăng xuất{% endif %}

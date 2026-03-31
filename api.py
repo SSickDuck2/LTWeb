@@ -18,7 +18,7 @@ from backend.routes.faculties import router as faculties_router
 from backend.routes.majors import router as majors_router
 from backend.routes.curricula import router as curricula_router
 from backend.routes.subjects import router as subjects_router
-from backend.orm import Teacher, SessionLocal
+from backend.orm import Curriculum, Faculty, Major, Teacher, SessionLocal
 from backend.database import get_db
 
 app = FastAPI(title="NEU Curriculum API", version="1.0.0")
@@ -96,6 +96,98 @@ def _verify_teacher_password(teacher_code: str, password: str) -> bool:
         db.close()
 
 
+def _get_teacher_by_code(teacher_code: Optional[str]) -> Optional[Teacher]:
+    if not teacher_code:
+        return None
+    db = SessionLocal()
+    try:
+        return db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
+    finally:
+        db.close()
+
+
+def _resolve_teacher_scope_ids(teacher: Optional[Teacher]) -> Dict[str, Optional[int]]:
+    if not teacher:
+        return {
+            "school_id": None,
+            "faculty_id": None,
+            "major_id": None,
+            "curricula_id": None,
+        }
+
+    school_id = teacher.school_id
+    faculty_id = teacher.faculty_id
+    major_id = teacher.major_id
+    curricula_id = teacher.curricula_id
+
+    db = SessionLocal()
+    try:
+        selected_faculty = None
+        if faculty_id is not None:
+            selected_faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+            if selected_faculty and school_id is not None and selected_faculty.school_id != school_id:
+                selected_faculty = None
+
+        if selected_faculty is None and school_id is not None:
+            selected_faculty = (
+                db.query(Faculty)
+                .filter(Faculty.school_id == school_id)
+                .order_by(Faculty.id.asc())
+                .first()
+            )
+
+        if selected_faculty is not None:
+            faculty_id = selected_faculty.id
+            school_id = selected_faculty.school_id
+        else:
+            faculty_id = None
+
+        selected_major = None
+        if major_id is not None:
+            selected_major = db.query(Major).filter(Major.id == major_id).first()
+            if selected_major and faculty_id is not None and selected_major.faculty_id != faculty_id:
+                selected_major = None
+
+        if selected_major is None and faculty_id is not None:
+            selected_major = (
+                db.query(Major)
+                .filter(Major.faculty_id == faculty_id)
+                .order_by(Major.id.asc())
+                .first()
+            )
+
+        if selected_major is not None:
+            major_id = selected_major.id
+            faculty_id = selected_major.faculty_id
+        else:
+            major_id = None
+
+        selected_curriculum = None
+        if curricula_id is not None:
+            selected_curriculum = db.query(Curriculum).filter(Curriculum.id == curricula_id).first()
+            if selected_curriculum and major_id is not None and selected_curriculum.major_id != major_id:
+                selected_curriculum = None
+
+        if selected_curriculum is None and major_id is not None:
+            selected_curriculum = (
+                db.query(Curriculum)
+                .filter(Curriculum.major_id == major_id)
+                .order_by(Curriculum.id.asc())
+                .first()
+            )
+
+        curricula_id = selected_curriculum.id if selected_curriculum is not None else None
+    finally:
+        db.close()
+
+    return {
+        "school_id": school_id,
+        "faculty_id": faculty_id,
+        "major_id": major_id,
+        "curricula_id": curricula_id,
+    }
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     """Trang đăng nhập"""
@@ -139,7 +231,13 @@ def login(request: Request, teacher_code: str = Form(...), password: str = Form(
     try:
         teacher = db.query(Teacher).filter(Teacher.teacher_code == teacher_code).first()
         if teacher:
+            scope = _resolve_teacher_scope_ids(teacher)
             request.session["teacher_id"] = teacher.teacher_code
+            request.session["full_name"] = teacher.full_name
+            request.session["school_id"] = scope.get("school_id")
+            request.session["faculty_id"] = scope.get("faculty_id")
+            request.session["major_id"] = scope.get("major_id")
+            request.session["curricula_id"] = scope.get("curricula_id")
     finally:
         db.close()
     
@@ -457,7 +555,7 @@ def curricula_page(
                 'current_id': major_id,
                 'url_template': f'/curricula?major_id=ID_PLACEHOLDER&faculty_id={faculty_id_int}&school_id={school_id_int}'
             },
-            {'name': 'Curricula' if lang == 'en' else 'Các CTĐT', 'url': None}
+            {'name': 'Curriculum' if lang == 'en' else 'Các CTĐT', 'url': None}
         ]
 
         return _template_response(
@@ -728,6 +826,98 @@ def get_siblings_api(
         return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@app.get("/profile", response_class=HTMLResponse)
+def profile_page(request: Request):
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+
+    lang = _get_lang_from_request(request)
+    teacher = _get_teacher_by_code(teacher_code)
+    if not teacher:
+        request.session.clear()
+        return RedirectResponse(url="/login", status_code=303)
+
+    school_name = _resolve_name("schools", teacher.school_id, lang) if teacher.school_id else None
+    faculty_name = _resolve_name("faculties", teacher.faculty_id, lang) if teacher.faculty_id else None
+    major_name = _resolve_name("majors", teacher.major_id, lang) if teacher.major_id else None
+    curriculum_name = _resolve_name("curricula", teacher.curricula_id, lang) if teacher.curricula_id else None
+
+    return _template_response(
+        "profile.html",
+        request,
+        {
+            "lang": lang,
+            "authenticated": True,
+            "teacher_code": teacher.teacher_code,
+            "teacher": {
+                "teacher_code": teacher.teacher_code,
+                "full_name": teacher.full_name,
+                "school_id": teacher.school_id,
+                "school_name": school_name,
+                "faculty_id": teacher.faculty_id,
+                "faculty_name": faculty_name,
+                "major_id": teacher.major_id,
+                "major_name": major_name,
+                "curricula_id": teacher.curricula_id,
+                "curriculum_name": curriculum_name,
+                "created_at": teacher.created_at,
+            },
+        },
+    )
+
+
+@app.get("/my-curriculum")
+def my_curriculum(request: Request, to: str = Query("curriculum")):
+    teacher_code = _get_current_teacher(request)
+    if not teacher_code:
+        return RedirectResponse(url="/login", status_code=303)
+
+    teacher = _get_teacher_by_code(teacher_code)
+    scope = _resolve_teacher_scope_ids(teacher)
+
+    school_id = scope.get("school_id")
+    faculty_id = scope.get("faculty_id")
+    major_id = scope.get("major_id")
+    curricula_id = scope.get("curricula_id")
+
+    request.session["school_id"] = school_id
+    request.session["faculty_id"] = faculty_id
+    request.session["major_id"] = major_id
+    request.session["curricula_id"] = curricula_id
+
+    target = (to or "curriculum").lower()
+
+    if target == "faculty" and school_id:
+        return RedirectResponse(url=f"/faculties?school_id={school_id}", status_code=302)
+
+    if target == "major" and faculty_id:
+        url = f"/majors?faculty_id={faculty_id}"
+        if school_id:
+            url += f"&school_id={school_id}"
+        return RedirectResponse(url=url, status_code=302)
+
+    if target == "curriculum" and major_id:
+        url = f"/curricula?major_id={major_id}"
+        if faculty_id:
+            url += f"&faculty_id={faculty_id}"
+        if school_id:
+            url += f"&school_id={school_id}"
+        return RedirectResponse(url=url, status_code=302)
+
+    if target == "curriculum" and curricula_id:
+        url = f"/subjects?curricula_id={curricula_id}"
+        if major_id:
+            url += f"&major_id={major_id}"
+        if faculty_id:
+            url += f"&faculty_id={faculty_id}"
+        if school_id:
+            url += f"&school_id={school_id}"
+        return RedirectResponse(url=url, status_code=302)
+
+    return RedirectResponse(url="/", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
