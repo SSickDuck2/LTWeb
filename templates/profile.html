@@ -1,0 +1,74 @@
+{% extends "UI/base.html" %}
+
+{% block title %}{% if lang == 'en' %}Personal Information{% else %}Thông tin cá nhân{% endif %} - NEU Curriculum{% endblock %}
+
+{% block main_content %}
+<div class="breadcrumb" style="font-size: 14px; color: #555; display: flex; align-items: center; gap: 6px; margin-bottom: 20px; background: white; padding: 12px 18px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+    <a href="/" style="color: #00529c; text-decoration: none; font-weight: 500; padding: 4px 8px; border-radius: 4px;">
+        {% if lang == 'en' %}Home{% else %}Trang chủ{% endif %}
+    </a>
+    <span style="color: #999; font-size: 12px;">/</span>
+    <strong style="color: #333; font-weight: 600; padding: 4px 8px;">
+        {% if lang == 'en' %}Personal Information{% else %}Thông tin cá nhân{% endif %}
+    </strong>
+</div>
+
+<div class="table-wrapper" style="background: #fff; border: 1px solid #eef2f7; border-radius: 8px; overflow: hidden;">
+    <table>
+        <tbody>
+            <tr>
+                <th style="width: 260px;">{% if lang == 'en' %}Teacher Code{% else %}Mã giảng viên{% endif %}</th>
+                <td>{{ teacher.teacher_code }}</td>
+            </tr>
+            <tr>
+                <th>{% if lang == 'en' %}Full Name{% else %}Họ và tên{% endif %}</th>
+                <td>{{ teacher.full_name }}</td>
+            </tr>
+            <tr>
+                <th>{% if lang == 'en' %}School{% else %}Trường{% endif %}</th>
+                <td>
+                    {% if teacher.school_id %}
+                        {{ teacher.school_name or ('ID ' ~ teacher.school_id) }} (ID {{ teacher.school_id }})
+                    {% else %}
+                        {% if lang == 'en' %}Not assigned{% else %}Chưa gán{% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>{% if lang == 'en' %}Faculty{% else %}Khoa/Viện{% endif %}</th>
+                <td>
+                    {% if teacher.faculty_id %}
+                        {{ teacher.faculty_name or ('ID ' ~ teacher.faculty_id) }} (ID {{ teacher.faculty_id }})
+                    {% else %}
+                        {% if lang == 'en' %}Not assigned{% else %}Chưa gán{% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>{% if lang == 'en' %}Major{% else %}Ngành{% endif %}</th>
+                <td>
+                    {% if teacher.major_id %}
+                        {{ teacher.major_name or ('ID ' ~ teacher.major_id) }} (ID {{ teacher.major_id }})
+                    {% else %}
+                        {% if lang == 'en' %}Not assigned{% else %}Chưa gán{% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>{% if lang == 'en' %}Curriculum{% else %}Chương trình đào tạo{% endif %}</th>
+                <td>
+                    {% if teacher.curricula_id %}
+                        {{ teacher.curriculum_name or ('ID ' ~ teacher.curricula_id) }} (ID {{ teacher.curricula_id }})
+                    {% else %}
+                        {% if lang == 'en' %}Not assigned{% else %}Chưa gán{% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>{% if lang == 'en' %}Created At{% else %}Ngày tạo{% endif %}</th>
+                <td>{{ teacher.created_at or '-' }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
